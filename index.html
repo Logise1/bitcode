@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitCode Runner</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- CodeMirror (Editor de texto) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+
+    <!-- Pyodide (Intérprete de Python) -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+
+    <style>
+        /* Estilos para que CodeMirror funcione bien con Tailwind y flexbox */
+        .CodeMirror {
+            font-family: 'Source Code Pro', monospace;
+            height: 100%; /* El editor llenará el contenedor */
+            font-size: 16px;
+        }
+        .CodeMirror-gutters {
+            background-color: #313335 !important; /* Ajuste para tema darcula */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans h-full flex flex-col items-center justify-center p-4">
+
+    <!-- Pantalla de Carga -->
+    <div id="loading-screen" class="flex flex-col items-center justify-center h-full">
+        <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span id="loading-text" class="mt-4 text-lg">Cargando Intérprete de Python (Pyodide)...</span>
+    </div>
+
+    <!-- Contenedor Principal de la App (oculto al inicio) -->
+    <div id="app-container" class="hidden w-full max-w-7xl h-full flex flex-col md:flex-row gap-4">
+
+        <!-- Panel Izquierdo: Problema -->
+        <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg h-full overflow-y-auto">
+                <h1 id="problem-title" class="text-2xl font-bold text-blue-300 mb-4"></h1>
+                <div id="problem-description" class="prose prose-invert text-gray-300">
+                    <!-- Descripción del problema -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Editor y Consola -->
+        <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
+            
+            <!-- Editor de Código -->
+            <div class="flex-grow bg-gray-800 rounded-lg shadow-lg flex flex-col min-h-[300px]">
+                <div class="flex-shrink-0 bg-gray-700 p-2 rounded-t-lg flex justify-between items-center">
+                    <span class="text-sm font-medium">Editor de Python</span>
+                    <div>
+                        <button id="run-code" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm disabled:opacity-50">
+                            Ejecutar
+                        </button>
+                        <button id="submit-code" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md text-sm disabled:opacity-50">
+                            Enviar Solución
+                        </button>
+                    </div>
+                </div>
+                <!-- Contenedor para CodeMirror -->
+                <div class="flex-grow relative h-full">
+                    <textarea id="code-editor"></textarea>
+                </div>
+            </div>
+
+            <!-- Botones de Navegación -->
+            <div class="flex justify-between">
+                <button id="prev-problem" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">
+                    &larr; Anterior
+                </button>
+                <button id="next-problem" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">
+                    Siguiente &rarr;
+                </button>
+            </div>
+
+            <!-- Consola de Salida -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg h-48 flex flex-col">
+                <h3 class="text-lg font-semibold mb-2 flex-shrink-0">Consola</h3>
+                <pre id="console-output" class="bg-gray-900 rounded-md p-3 text-sm text-gray-300 h-full overflow-y-auto whitespace-pre-wrap"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- 1. Definición de Problemas ---
+        // ¡YA NO ESTÁ AQUÍ! Se cargará desde la URL
+        let problems = []; // Array vacío que llenaremos con fetch
+
+        // --- 2. Variables Globales ---
+        let pyodide;
+        let editor;
+        let currentProblemIndex = 0;
+
+        const loadingScreen = document.getElementById('loading-screen');
+        const loadingText = document.getElementById('loading-text');
+        const appContainer = document.getElementById('app-container');
+        
+        const problemTitle = document.getElementById('problem-title');
+        const problemDescription = document.getElementById('problem-description');
+        const codeEditor = document.getElementById('code-editor');
+        const consoleOutput = document.getElementById('console-output');
+        
+        const runButton = document.getElementById('run-code');
+        const submitButton = document.getElementById('submit-code');
+        const prevButton = document.getElementById('prev-problem');
+        const nextButton = document.getElementById('next-problem');
+
+        // --- 3. Funciones Principales ---
+
+        /**
+         * Función principal de inicialización.
+         */
+        async function main() {
+            try {
+                // Cargar Pyodide y los problemas del JSON *en paralelo*
+                const pyodidePromise = loadPyodide();
+                
+                // CAMBIO: Cargar desde la URL proporcionada
+                const problemsPromise = fetch("https://logise1.github.io/bitcode/problems.array")
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error(`Error HTTP! status: ${res.status}`);
+                        }
+                        return res.json(); // Asumimos que es un JSON
+                    })
+                    .catch(e => {
+                        console.error("Error al cargar o parsear 'problems.array':", e);
+                        // Mostrar un error claro al usuario
+                        loadingText.innerText = `Error al cargar problemas desde la URL. ¿Es un JSON válido? \n${e}`;
+                        throw e; // Detener la ejecución
+                    });
+
+                // Esperar a que ambas promesas se completen
+                pyodide = await pyodidePromise;
+                console.log("Pyodide cargado.");
+                
+                loadingText.innerText = "Cargando problemas...";
+                problems = await problemsPromise;
+                console.log("Problemas cargados:", problems);
+
+                // Inicializar CodeMirror
+                editor = CodeMirror.fromTextArea(codeEditor, {
+                    lineNumbers: true,
+                    mode: "python",
+                    theme: "darcula",
+                    autoCloseBrackets: true,
+                    autoCloseTags: true,
+                    tabSize: 4,
+                    indentUnit: 4
+                });
+
+                 // Cargar el primer problema
+                loadProblem(currentProblemIndex);
+                
+                // Ocultar loader y mostrar app
+                loadingScreen.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                
+                // Forzar refresco del editor
+                editor.refresh();
+
+            } catch (error) {
+                console.error("Error en la inicialización:", error);
+                if (!loadingText.innerText.startsWith("Error")) {
+                    loadingText.innerText = "Error fatal al cargar la aplicación. Revisa la consola.";
+                }
+            }
+        }
+
+        /**
+         * Carga un problema en la UI.
+         */
+        function loadProblem(index) {
+            const problem = problems[index];
+            problemTitle.innerText = problem.title;
+            problemDescription.innerHTML = problem.description;
+            
+            // Añadir la dificultad a la descripción
+            let difficultyColor = "text-green-400"; // Fácil
+            if (problem.difficulty === "Medio") {
+                difficultyColor = "text-yellow-400";
+            } else if (problem.difficulty === "Difícil") {
+                difficultyColor = "text-red-400";
+            }
+            problemTitle.innerHTML += ` <span class="text-sm ${difficultyColor} font-normal">(${problem.difficulty})</span>`;
+
+            editor.setValue(problem.starterCode);
+            consoleOutput.innerText = `Problema ${index + 1} cargado.`;
+            
+            // Actualizar estado de botones de navegación
+            prevButton.disabled = (index === 0);
+            nextButton.disabled = (index === problems.length - 1);
+        }
+
+        /**
+         * Habilita o deshabilita los botones.
+         */
+        function setButtonsDisabled(disabled) {
+            runButton.disabled = disabled;
+            submitButton.disabled = disabled;
+        }
+
+        /**
+         * Ejecuta el código del usuario SIN los tests, solo lo que está en el editor.
+         */
+        async function runCode() {
+            const userCode = editor.getValue();
+            consoleOutput.innerText = "Ejecutando...";
+            setButtonsDisabled(true);
+
+            try {
+                // Configurar stdout y stderr para capturarlos
+                await pyodide.runPythonAsync(`
+                    import sys
+                    import io
+                    sys.stdout = io.StringIO()
+                    sys.stderr = io.StringIO()
+                `);
+
+                // Ejecutar el código del usuario
+                let result = await pyodide.runPythonAsync(userCode);
+                
+                // Obtener la salida estándar
+                let stdout = await pyodide.runPythonAsync("sys.stdout.getvalue()");
+                // Obtener la salida de error
+                let stderr = await pyodide.runPythonAsync("sys.stderr.getvalue()");
+                
+                if (stderr) {
+                    consoleOutput.innerHTML = `<span class="text-red-500">Error:</span>\n${stderr}`;
+                } else if (stdout) {
+                    consoleOutput.innerText = stdout;
+                } else if (result !== undefined && result !== null) {
+                    // Si no hubo print() pero la última línea devolvió algo
+                    consoleOutput.innerText = String(result);
+                } else {
+                    consoleOutput.innerText = "(Sin salida)";
+                }
+
+            } catch (e) {
+                consoleOutput.innerHTML = `<span class="text-red-500">Error del intérprete:</span>\n${e.message}`;
+            }
+
+            setButtonsDisabled(false);
+        }
+
+        /**
+         * Ejecuta el código del usuario CON los tests.
+         */
+        async function submitCode() {
+            const userCode = editor.getValue();
+            const problem = problems[currentProblemIndex];
+            
+            if (!problem.testCode) {
+                consoleOutput.innerHTML = `<span class="text-yellow-500">Este problema no tiene tests definidos.</span>`;
+                return;
+            }
+
+            consoleOutput.innerText = "Ejecutando pruebas...";
+            setButtonsDisabled(true);
+
+            // FIX: ¡La indentación es necesaria!
+            // El código del usuario y el código de prueba deben estar
+            // indentados con 4 espacios para encajar en el bloque 'try:'
+            const indentedUserCode = userCode.replace(/^/gm, '    ');
+            const indentedTestCode = problem.testCode.replace(/^/gm, '    ');
+
+
+            // Código completo (código del usuario + código de prueba)
+            const fullScript = `
+import sys
+import io
+
+sys.stdout = io.StringIO()
+sys.stderr = io.StringIO()
+output = ""
+
+try:
+    # --- Código del Usuario ---
+${indentedUserCode}
+    # --- Fin del Código del Usuario ---
+
+    # --- Arnés de Pruebas ---
+${indentedTestCode}
+    # --- Fin del Arnés de Pruebas ---
+
+except Exception as e:
+    # Capturar errores de sintaxis o runtime EN EL CÓDIGO DEL USUARIO/TESTS
+    print(f"__FAILURE__: Error de sintaxis o ejecución: {e}")
+
+stdout_value = sys.stdout.getvalue()
+stderr_value = sys.stderr.getvalue()
+
+if stderr_value:
+    output = f"Error de Runtime:\\n{stderr_value}"
+else:
+    output = stdout_value
+
+# Devolver la salida
+{'output': output}
+            `;
+            
+            try {
+                // Ejecutar el script completo
+                let resultProxy = await pyodide.runPythonAsync(fullScript);
+                let result = resultProxy.toJs(); // Convertir PyProxy a objeto JS
+                resultProxy.destroy();
+                
+                let output = result.output;
+
+                // Interpretar la salida del arnés de pruebas
+                if (output.includes("__SUCCESS__")) {
+                    consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
+                    // Podríamos añadir lógica para pasar al siguiente problema
+                    setTimeout(nextProblem, 2000); // Avanza auto
+                } else if (output.includes("__FAILURE__:")) {
+                    // Extraer solo el mensaje de error
+                    let errorMsg = output.split("__FAILURE__:")[1] || "Tests fallidos.";
+                    consoleOutput.innerHTML = `<span class="text-red-400 font-bold">Solución Incorrecta:</span>\n${errorMsg.trim()}`;
+                } else {
+                    // Salida inesperada (ej. si el test code falló)
+                    consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test:</span>\n${output}`;
+                }
+
+            } catch (e) {
+                // Capturar errores del intérprete de Pyodide (ej. error en NUESTRO script)
+                consoleOutput.innerHTML = `<span class="text-red-500">Error del intérprete:</span>\n${e.message}`;
+            }
+
+            setButtonsDisabled(false);
+        }
+
+        /**
+         * Carga el siguiente problema.
+         */
+        function nextProblem() {
+            if (currentProblemIndex < problems.length - 1) {
+                currentProblemIndex++;
+                loadProblem(currentProblemIndex);
+            }
+        }
+        
+        /**
+         * Carga el problema anterior.
+         */
+        function prevProblem() {
+            if (currentProblemIndex > 0) {
+                currentProblemIndex--;
+                loadProblem(currentProblemIndex);
+            }
+        }
+
+        // --- 4. Event Listeners ---
+        runButton.addEventListener('click', runCode);
+        submitButton.addEventListener('click', submitCode);
+        prevButton.addEventListener('click', prevProblem);
+        nextButton.addEventListener('click', nextProblem);
+
+        // --- 5. Ejecución ---
+        main();
+
+    </script>
+</body>
+</html>
