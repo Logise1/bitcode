@@ -18,7 +18,6 @@
     <!-- Pyodide (Intérprete de Python) -->
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
 
-    <!-- M O D I F I C A D O: Tone.js eliminado -->
 
     <style>
         /* Estilos para que CodeMirror funcione bien con Tailwind y flexbox */
@@ -32,10 +31,8 @@
         }
     </style>
 </head>
-<!-- M O D I F I C A D O: Body ya no usa flex, permitiendo scroll natural -->
 <body class="bg-gray-900 text-gray-200 font-sans h-full">
 
-    <!-- M O D I F I C A D O: Pantalla de Carga como overlay (arregla scroll) -->
     <div id="loading-screen" class="fixed inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
         <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -44,11 +41,84 @@
         <span id="loading-text" class="mt-4 text-lg">Cargando Intérprete de Python (Pyodide)...</span>
     </div>
 
-    <!-- M O D I F I C A D O: Vista de Lista con padding y mx-auto -->
+    <!-- N U E V O: Modal de Autenticación -->
+    <div id="auth-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-40 p-4">
+        <div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md relative">
+            
+            <!-- Botón de Cerrar Modal -->
+            <button id="close-auth-modal" class="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors">
+                <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <!-- Pestañas -->
+            <div class="border-b border-gray-700">
+                <nav class="flex -mb-px" aria-label="Tabs">
+                    <button data-auth-tab="#auth-login" class="w-1/2 py-4 px-1 text-center border-b-2 border-blue-500 font-medium text-base text-blue-400">
+                        Iniciar Sesión
+                    </button>
+                    <button data-auth-tab="#auth-register" class="w-1/2 py-4 px-1 text-center border-b-2 border-transparent font-medium text-base text-gray-400 hover:text-gray-200 hover:border-gray-500">
+                        Registrarse
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Contenido Pestaña Iniciar Sesión -->
+            <div id="auth-login" data-auth-content class="p-6">
+                <h2 class="text-xl font-bold text-white mb-4">¡Bienvenido de nuevo!</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="login-email" class="block text-sm font-medium text-gray-300">Email</label>
+                        <input type="email" id="login-email" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="login-password" class="block text-sm font-medium text-gray-300">Contraseña</label>
+                        <input type="password" id="login-password" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <p id="login-error" class="text-red-400 text-sm"></p>
+                    <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition-all hover:scale-105">
+                        Iniciar Sesión
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenido Pestaña Registrarse -->
+            <div id="auth-register" data-auth-content class="p-6 hidden">
+                <h2 class="text-xl font-bold text-white mb-4">Crea tu cuenta</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="register-email" class="block text-sm font-medium text-gray-300">Email</label>
+                        <input type="email" id="register-email" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="register-password" class="block text-sm font-medium text-gray-300">Contraseña (mín. 6 caracteres)</label>
+                        <input type="password" id="register-password" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <p id="register-error" class="text-red-400 text-sm"></p>
+                    <button id="register-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition-all hover:scale-105">
+                        Crear Cuenta
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Vista de Lista con padding y mx-auto -->
     <div id="problem-list-view" class="hidden w-full max-w-7xl h-full flex flex-col p-6 mx-auto">
-        <header class="flex-shrink-0 flex justify-between items-center mb-6 pb-4 border-b border-gray-700">
+        <header class="flex-shrink-0 flex flex-wrap justify-between items-center mb-6 pb-4 border-b border-gray-700 gap-4">
             <h1 class="text-3xl font-bold text-white">BitCode</h1>
-            <span class="text-gray-400">Tu Aventura de Python</span>
+            <!-- N U E V O: Estado de Autenticación en Header -->
+            <div class="flex items-center gap-4">
+                <span id="user-status-header" class="text-gray-400 text-sm">Invitado</span>
+                <button id="login-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm">
+                    Iniciar Sesión
+                </button>
+                <button id="logout-btn-header" class="hidden bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm">
+                    Cerrar Sesión
+                </button>
+            </div>
         </header>
         <div class="flex-grow overflow-y-auto pr-2">
              <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -58,7 +128,7 @@
     </div>
 
 
-    <!-- M O D I F I C A D O: Contenedor Principal con padding y mx-auto -->
+    <!-- Contenedor Principal con padding y mx-auto -->
     <div id="app-container" class="hidden w-full max-w-7xl h-full flex flex-col md:flex-row gap-4 p-6 mx-auto">
 
         <!-- Panel Izquierdo: Problema -->
@@ -82,7 +152,7 @@
         <!-- Panel Derecho: Editor y Consola -->
         <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
             
-            <!-- N U E V O: Barra de botones (movida aquí) -->
+            <!-- Barra de botones (movida aquí) -->
             <div class="flex-shrink-0 bg-gray-800 p-3 rounded-lg shadow-lg flex justify-end items-center gap-4">
                 <button id="run-code" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm disabled:opacity-50 transition-all hover:scale-105">
                     Ejecutar
@@ -92,7 +162,7 @@
                 </button>
             </div>
 
-            <!-- M O D I F I C A D O: Editor de Código (sin botones en header) -->
+            <!-- Editor de Código (sin botones en header) -->
             <div class="flex-grow bg-gray-800 rounded-lg shadow-lg flex flex-col min-h-[300px]">
                 <div class="flex-shrink-0 bg-gray-700 p-2 rounded-t-lg flex justify-between items-center">
                     <span class="text-sm font-medium">Editor de Python</span>
@@ -121,20 +191,66 @@
         </div>
     </div>
 
-    <!-- N U E V O: Elementos de Audio (usando .mp3) -->
+    <!-- Elementos de Audio (usando .mp3) -->
     <audio id="audio-enter" src="assets/enter.mp3" preload="auto"></audio>
     <audio id="audio-execute" src="assets/execute.mp3" preload="auto"></audio>
     <audio id="audio-complete" src="assets/complete.mp3" preload="auto"></audio>
 
 
     <script type="module">
-        // --- 1. Variables Globales ---
+        // Importa las funciones que necesitas de los SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword, 
+            signOut,
+            signInAnonymously,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc
+            // enableLogging // Para depuración (eliminado, causaba error de importación)
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- N U E V O: Configuración de Firebase (la que proporcionaste) ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyC9iNBJie4aHiW-igtdRN3farWRq9AlbIU",
+          authDomain: "bitcode-9f43a.firebaseapp.com",
+          projectId: "bitcode-9f43a",
+          storageBucket: "bitcode-9f43a.firebasestorage.app",
+          messagingSenderId: "990831599191",
+          appId: "1:990831599191:web:17567e76c1cd6fe8ea0d12",
+          measurementId: "G-X0MRZNY0LD"
+        };
+        
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        // Habilitar logs de Firestore (útil para depurar)
+        // La función 'enableLogging' no está disponible en este SDK modular.
+        
+        // Usar appId del config O el global __app_id si existe, para las rutas de Firestore
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
+        
+        // --- 1. Variables Globales (Modificadas) ---
         let problems = []; 
         let pyodide;
         let editor;
         let currentProblemIndex = 0;
+        
+        // N U E V O: Estado de Autenticación y Progreso
+        let userId = null;
+        let isGuest = true;
+        let userEmail = "Invitado";
+        let solvedProblemsList = []; // Reemplaza a localStorage
 
-        // --- M O D I F I C A D O: Referencias a Audio HTML5 ---
+        // Referencias a Audio HTML5
         const audioEnter = document.getElementById('audio-enter');
         const audioExecute = document.getElementById('audio-execute');
         const audioComplete = document.getElementById('audio-complete');
@@ -149,6 +265,9 @@
         
         // Vista de Lista
         const problemGrid = document.getElementById('problem-grid');
+        const loginButtonHeader = document.getElementById('login-btn-header');
+        const logoutButtonHeader = document.getElementById('logout-btn-header');
+        const userStatusHeader = document.getElementById('user-status-header');
 
         // Vista de Editor
         const problemTitle = document.getElementById('problem-title');
@@ -160,20 +279,27 @@
         const backToListBtn = document.getElementById('back-to-list-btn');
         const runButton = document.getElementById('run-code');
         const submitButton = document.getElementById('submit-code');
-        const prevButton = document.getElementById('prev-problem');
-        const nextButton = document.getElementById('next-problem');
+        
+        // N U E V O: Elementos del Modal de Auth
+        const authModal = document.getElementById('auth-modal');
+        const closeAuthModalBtn = document.getElementById('close-auth-modal');
+        const authTabs = document.querySelectorAll('[data-auth-tab]');
+        const authContents = document.querySelectorAll('[data-auth-content]');
+        const loginEmailField = document.getElementById('login-email');
+        const loginPasswordField = document.getElementById('login-password');
+        const loginBtn = document.getElementById('login-btn');
+        const loginError = document.getElementById('login-error');
+        const regEmailField = document.getElementById('register-email');
+        const regPasswordField = document.getElementById('register-password');
+        const regBtn = document.getElementById('register-btn');
+        const regError = document.getElementById('register-error');
+
         
         // Iconos SVG para la lista
         const lockIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>`;
         const checkIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
 
         // --- 2. Funciones de Sonido (Usando HTML5 Audio) ---
-
-        /**
-         * NOTA: La inicialización de audio (Tone.start) ya no es necesaria.
-         * El navegador manejará la reproducción en el primer clic.
-         */
-
         function playEnterSound() {
             if (audioEnter) {
                 audioEnter.currentTime = 0;
@@ -195,16 +321,146 @@
             }
         }
         
-        // El 'initAudio' y el listener en 'document.body' ya no son necesarios.
-
-
-        // --- 3. Funciones de Lógica de la App ---
+        // --- 3. N U E V O: Funciones de Autenticación y UI ---
 
         /**
-         * Función principal de inicialización.
+         * Muestra/Oculta el modal de autenticación
+         */
+        function showAuthModal() { authModal.classList.remove('hidden'); }
+        function hideAuthModal() { authModal.classList.add('hidden'); }
+
+        /**
+         * Actualiza la UI del header según el estado de auth
+         */
+        function updateAuthUI(email, isUserGuest) {
+            userStatusHeader.innerText = email;
+            if (isUserGuest) {
+                loginButtonHeader.classList.remove('hidden');
+                logoutButtonHeader.classList.add('hidden');
+            } else {
+                loginButtonHeader.classList.add('hidden');
+                logoutButtonHeader.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Maneja el login
+         */
+        async function handleLogin() {
+            const email = loginEmailField.value;
+            const password = loginPasswordField.value;
+            loginError.innerText = "";
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                hideAuthModal();
+            } catch (error) {
+                console.error("Error de login:", error.message);
+                loginError.innerText = "Email o contraseña incorrectos.";
+            }
+        }
+
+        /**
+         * Maneja el registro
+         */
+        async function handleRegister() {
+            const email = regEmailField.value;
+            const password = regPasswordField.value;
+            regError.innerText = "";
+            if (password.length < 6) {
+                regError.innerText = "La contraseña debe tener al menos 6 caracteres.";
+                return;
+            }
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                hideAuthModal();
+            } catch (error) {
+                console.error("Error de registro:", error.message);
+                if (error.code === 'auth/email-already-in-use') {
+                    regError.innerText = "Este email ya está en uso.";
+                } else {
+                    regError.innerText = "Error al registrarse. Inténtalo de nuevo.";
+                }
+            }
+        }
+
+        /**
+         * Maneja el logout
+         */
+        async function handleLogout() {
+            try {
+                await signOut(auth);
+                // onAuthStateChanged se encargará de loguear como anónimo
+            } catch (error) {
+                console.error("Error al cerrar sesión:", error);
+            }
+        }
+
+        // --- 4. N U E V O: Funciones de Progreso (Firestore) ---
+
+        /**
+         * Carga el progreso del usuario desde Firestore
+         */
+        async function loadUserProgress() {
+            if (!userId) {
+                console.log("Sin userId, cargando progreso vacío.");
+                solvedProblemsList = [];
+                return;
+            }
+            
+            console.log(`Cargando progreso para userId: ${userId} en ruta: /artifacts/${appId}/users/${userId}/progress/main`);
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    solvedProblemsList = docSnap.data().solved || [];
+                    console.log("Progreso cargado:", solvedProblemsList);
+                } else {
+                    console.log("No existe documento de progreso, empezando de cero.");
+                    solvedProblemsList = [];
+                }
+            } catch (error) {
+                console.error("Error al cargar progreso de Firestore:", error);
+                solvedProblemsList = [];
+            }
+        }
+
+        /**
+         * Guarda el progreso del usuario en Firestore
+         */
+        async function saveUserProgress() {
+            if (!userId) {
+                console.warn("No se puede guardar progreso: userId es nulo.");
+                return;
+            }
+            
+            console.log(`Guardando progreso para userId: ${userId} en ruta: /artifacts/${appId}/users/${userId}/progress/main`);
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
+            try {
+                await setDoc(docRef, { solved: solvedProblemsList });
+                console.log("Progreso guardado.");
+            } catch (error) {
+                console.error("Error al guardar progreso en Firestore:", error);
+            }
+        }
+
+        /**
+         * M O D I F I C A D O: Ya no usa localStorage, solo devuelve la variable global
+         */
+        function getSolvedProblems() {
+            return solvedProblemsList;
+        }
+
+
+        // --- 5. Funciones de Lógica de la App (Modificadas) ---
+
+        /**
+         * M O D I F I C A D O: Función principal de inicialización
          */
         async function main() {
             try {
+                // Configurar el listener de Auth ANTES de cargar nada más
+                setupAuthListener();
+
                 // Cargar Pyodide y los problemas del JSON *en paralelo*
                 const pyodidePromise = loadPyodide();
                 const problemsPromise = fetch("my_problems.json")
@@ -236,9 +492,6 @@
                     tabSize: 4,
                     indentUnit: 4
                 });
-
-                 // Renderizar la lista de problemas
-                renderProblemList();
                 
                 // Ocultar loader y mostrar la VISTA DE LISTA
                 loadingScreen.classList.add('hidden');
@@ -251,27 +504,62 @@
                 }
             }
         }
-
+        
         /**
-         * Obtiene los índices de problemas resueltos desde localStorage.
+         * N U E V O: Listener de Auth
          */
-        function getSolvedProblems() {
-            const solved = localStorage.getItem('solvedProblems');
-            if (!solved) {
-                return []; // Devuelve un array de índices
-            }
-            try {
-                const parsed = JSON.parse(solved);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-                return [];
-            }
+        function setupAuthListener() {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    // Usuario está logueado (real o anónimo)
+                    userId = user.uid;
+                    isGuest = user.isAnonymous;
+                    userEmail = user.email || (isGuest ? "Invitado" : `Usuario (${user.uid.substring(0, 5)})`);
+                    
+                    console.log(`Estado de Auth cambiado: ${userEmail}, Anónimo: ${isGuest}, UID: ${userId}`);
+                    
+                    updateAuthUI(userEmail, isGuest);
+                    await loadUserProgress(); // Cargar progreso desde Firestore
+                    renderProblemList(); // Re-renderizar lista con el progreso
+                    
+                } else {
+                    // No hay usuario, loguear como anónimo
+                    console.log("No hay usuario, logueando (token o anónimo)...");
+                    userId = null;
+                    isGuest = true;
+                    userEmail = "Invitado";
+                    solvedProblemsList = []; // Resetear progreso
+                    
+                    updateAuthUI(userEmail, isGuest);
+                    renderProblemList(); // Renderizar lista vacía
+                    
+                    try {
+                        // Usar token si existe, si no, anónimo
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            console.log("Iniciando sesión con __initial_auth_token...");
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            console.log("Iniciando sesión anónimamente...");
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error en login anónimo/token:", error);
+                        loadingText.innerText = "Error de autenticación. No se puede iniciar la app.";
+                    }
+                }
+            });
         }
 
+
         /**
-         * Renderiza la cuadrícula de problemas en la "landing page".
+         * M O D I F I C A D O: Renderiza la cuadrícula de problemas
          */
         function renderProblemList() {
+            if (!auth.currentUser) {
+                console.log("RenderProblemList saltado, auth no está listo.");
+                return; // No renderizar si auth no está listo
+            }
+            
             const solvedProblems = getSolvedProblems();
             const unlockedUpTo = solvedProblems.length; 
             
@@ -281,7 +569,6 @@
                 const isSolved = solvedProblems.includes(index);
                 const isUnlocked = index <= unlockedUpTo;
 
-                // M O D I F I C A D O: Clases de tarjeta (similares a la captura)
                 let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all";
                 let cardIcon = "";
                 let difficultyColor = "text-green-400";
@@ -314,8 +601,15 @@
                 `;
 
                 if (isUnlocked) {
-                    // Solo añadir evento de clic si está desbloqueado
-                    card.addEventListener('click', () => showEditorView(index));
+                    // M O D I F I C A D O: Añadir lógica de Auth
+                    card.addEventListener('click', () => {
+                        // Comprobar si es invitado Y está intentando acceder a problema > 0
+                        if (auth.currentUser && auth.currentUser.isAnonymous && index > 0) {
+                            showAuthModal(); // Pedir login/registro
+                        } else {
+                            showEditorView(index); // Permitir acceso
+                        }
+                    });
                 }
 
                 problemGrid.appendChild(card);
@@ -331,7 +625,8 @@
             appContainer.classList.remove('hidden');
             currentProblemIndex = index;
             loadProblem(index);
-            editor.refresh(); // ¡Importante! Refrescar CM cuando se hace visible
+            // Refrescar CodeMirror DESPUÉS de que sea visible
+            setTimeout(() => editor.refresh(), 0);
         }
 
         /**
@@ -374,10 +669,6 @@
 
             editor.setValue(problem.starterCode || "# Escribe tu código aquí\n");
             consoleOutput.innerText = `Problema ${index + 1} cargado.`;
-            
-            // Actualizar estado de botones de navegación
-            prevButton.disabled = (index === 0);
-            nextButton.disabled = (index === problems.length - 1);
         }
 
         /**
@@ -425,7 +716,8 @@
         }
 
         /**
-         * Ejecuta el código del usuario CON los tests.
+         * M O D I F I C A D O: Ejecuta el código del usuario CON los tests
+         * (Ahora es async y guarda en Firestore)
          */
         async function submitCode() {
             playExecuteSound(); // Sonido al ejecutar
@@ -477,19 +769,18 @@ else:
                     playCompleteSound(); // Sonido de éxito
                     consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
                     
-                    // --- N U E V O: Guardar Progreso ---
-                    let solved = getSolvedProblems();
-                    if (!solved.includes(currentProblemIndex)) {
-                        solved.push(currentProblemIndex);
-                        solved.sort((a, b) => a - b); // Mantenerlos ordenados
-                        localStorage.setItem('solvedProblems', JSON.stringify(solved));
+                    // --- M O D I F I C A D O: Guardar Progreso en Firestore ---
+                    if (!solvedProblemsList.includes(currentProblemIndex)) {
+                        solvedProblemsList.push(currentProblemIndex);
+                        solvedProblemsList.sort((a, b) => a - b); // Mantenerlos ordenados
+                        await saveUserProgress(); // Guardar en Firestore
                     }
                     
                     // Volver a la lista después de 2 segundos
                     setTimeout(showProblemListView, 2000); 
 
                 } else if (output.includes("__FAILURE__:")) {
-                    let errorMsg = output.split("__FAILURE__")[1] || "Tests fallidos.";
+                    let errorMsg = output.split("__FAILURE__:")[1] || "Tests fallidos.";
                     consoleOutput.innerHTML = `<span class="text-red-400 font-bold">Solución Incorrecta:</span>\n${errorMsg.trim()}`;
                 } else {
                     consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test:</span>\n${output}`;
@@ -502,34 +793,32 @@ else:
             setButtonsDisabled(false);
         }
 
-        /**
-         * Carga el siguiente problema (navegación en el editor).
-         */
-        function nextProblem() {
-            if (currentProblemIndex < problems.length - 1) {
-                currentProblemIndex++;
-                loadProblem(currentProblemIndex);
-            }
-        }
-        
-        /**
-         * Carga el problema anterior (navegación en el editor).
-         */
-        function prevProblem() {
-            if (currentProblemIndex > 0) {
-                currentProblemIndex--;
-                loadProblem(currentProblemIndex);
-            }
-        }
-
-        // --- 4. Event Listeners ---
+        // --- 6. Event Listeners ---
         backToListBtn.addEventListener('click', showProblemListView);
         runButton.addEventListener('click', runCode);
         submitButton.addEventListener('click', submitCode);
-        prevButton.addEventListener('click', prevProblem);
-        nextButton.addEventListener('click', nextProblem);
 
-        // --- 5. Ejecución ---
+        // N U E V O: Listeners de Auth
+        loginButtonHeader.addEventListener('click', showAuthModal);
+        logoutButtonHeader.addEventListener('click', handleLogout);
+        closeAuthModalBtn.addEventListener('click', hideAuthModal);
+        loginBtn.addEventListener('click', handleLogin);
+        regBtn.addEventListener('click', handleRegister);
+        
+        // Listener para las pestañas del modal
+        authTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = document.querySelector(tab.dataset.authTab);
+                
+                authContents.forEach(content => content.classList.add('hidden'));
+                target.classList.remove('hidden');
+                
+                authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
+                tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
+            });
+        });
+
+        // --- 7. Ejecución ---
         main();
 
     </script>
