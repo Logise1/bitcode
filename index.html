@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitCode Runner</title>
+    <title>BitCode</title>
     <!-- N U E V O: Favicon -->
     <link rel="icon" type="image/png" href="favicon.png">
     
@@ -375,29 +375,42 @@
             regError.innerText = "";
         }
 
-        // N U E V O: Función de helper para obtener info del nivel
+        // M O D I F I C A D O: Sistema de 10 Rangos
         function getLevelInfo(solvedCount, totalProblems) {
-            if (solvedCount < 5) {
-                return { name: "Principiante", nextLevelAt: 5, nextLevelName: "Aficionado" };
+            const total = totalProblems || 100; // Asumir 100
+
+            if (solvedCount < 10) { // Rango 1
+                return { name: "Principiante", nextLevelAt: 10, nextLevelName: "Aprendiz" };
             }
-            if (solvedCount < 10) {
-                return { name: "Aficionado", nextLevelAt: 10, nextLevelName: "Programador" };
+            if (solvedCount < 20) { // Rango 2
+                return { name: "Aprendiz", nextLevelAt: 20, nextLevelName: "Programador" };
             }
-            if (solvedCount < 15) {
-                return { name: "Programador", nextLevelAt: 15, nextLevelName: "Veterano" };
+            if (solvedCount < 30) { // Rango 3
+                return { name: "Programador", nextLevelAt: 30, nextLevelName: "Veterano" };
             }
-            if (solvedCount < 20) {
-                return { name: "Veterano", nextLevelAt: 20, nextLevelName: "Experto" };
+            if (solvedCount < 40) { // Rango 4
+                return { name: "Veterano", nextLevelAt: 40, nextLevelName: "Experto" };
+            }
+            if (solvedCount < 50) { // Rango 5
+                return { name: "Experto", nextLevelAt: 50, nextLevelName: "Élite" };
+            }
+            if (solvedCount < 60) { // Rango 6
+                return { name: "Élite", nextLevelAt: 60, nextLevelName: "Maestro" };
+            }
+            if (solvedCount < 70) { // Rango 7
+                return { name: "Maestro", nextLevelAt: 70, nextLevelName: "Gran Maestro" };
+            }
+            if (solvedCount < 80) { // Rango 8
+                return { name: "Gran Maestro", nextLevelAt: 80, nextLevelName: "Conquistador" };
+            }
+            if (solvedCount < total) { // Rango 9 (cubre de 80 a 99)
+                return { name: "Conquistador", nextLevelAt: total, nextLevelName: "Leyenda" };
             }
             
-            // Usar total problems (default a 25 si no está cargado)
-            const total = totalProblems || 25; 
-            if (solvedCount < total) {
-                return { name: "Experto", nextLevelAt: total, nextLevelName: "Maestro" };
-            }
-            
-            return { name: "Maestro", nextLevelAt: null, nextLevelName: null }; // Nivel Maestro
+            // Rango 10 (100+)
+            return { name: "Leyenda", nextLevelAt: null, nextLevelName: null }; // Rango Máximo
         }
+
 
         // M O D I F I C A D O: Función 'updateLevelUI'
         function updateLevelUI() {
@@ -414,7 +427,7 @@
                     const problemsLeft = levelInfo.nextLevelAt - solvedCount;
                     userLevelProgressText.innerText = `Resuelve ${problemsLeft} problema${problemsLeft > 1 ? 's' : ''} más para llegar a ${levelInfo.nextLevelName}.`;
                 } else {
-                    userLevelProgressText.innerText = "¡Felicidades, eres un Maestro BitCode!";
+                    userLevelProgressText.innerText = "¡Felicidades, eres una Leyenda de BitCode!";
                 }
             }
         }
@@ -879,7 +892,7 @@
             
             if (problem && problem.hint) {
                 hintButton.classList.remove('hidden'); // Mostrar botón
-                let secondsLeft = 90; // 1.5 minutos
+                let secondsLeft = 300; // 1.5 minutos
                 hintButton.disabled = true;
                 hintButton.innerHTML = `💡 Ver Pista (espera ${secondsLeft}s)`;
                 
