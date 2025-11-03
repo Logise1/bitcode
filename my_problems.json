@@ -1,950 +1,802 @@
-<!DOCTYPE html>
-<html lang="es" class="h-full">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitCode Runner</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- CodeMirror (Editor de texto) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
-
-    <!-- Pyodide (Intérprete de Python) -->
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
-    
-    <style>
-        /* Estilos de CodeMirror para que ocupe espacio */
-        .CodeMirror {
-            /* N U E V O: CodeMirror debe ser absoluto para llenar el contenedor 'relative' */
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 100%;
-            font-size: 16px;
-        }
-        /* Scrollbars customizadas */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #1f2937; } /* gray-800 */
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } /* gray-600 */
-        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* gray-500 */
-
-        /* Transición de blur para el modal */
-        #problem-list-view.blurred, #app-container.blurred {
-            filter: blur(4px) grayscale(50%);
-            pointer-events: none;
-            user-select: none;
-            transition: filter 0.2s ease-out;
-        }
-    </style>
-</head>
-<body class="bg-gray-900 text-gray-100 font-sans h-full flex flex-col">
-
-    <!-- 1. Pantalla de Carga Inicial -->
-    <div id="loading-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900">
-        <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        <h1 class="text-2xl font-bold mt-4">BitCode</h1>
-        <p id="loading-text" class="text-gray-400 mt-2">Inicializando intérprete de Python...</p>
-    </div>
-
-    <!-- 2. Vista de Lista de Problemas (Landing Page) -->
-    <div id="problem-list-view" class="h-full flex-col hidden">
-        <!-- Header -->
-        <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center w-full z-10 sticky top-0">
-            <h1 class="text-2xl font-bold text-white">BitCode</h1>
-            <!-- Contenedor de Usuario con Nivel -->
-            <div class="flex items-center space-x-6">
-                <!-- M O D I F I C A D O: Cambiado SVG por Emoji -->
-                <div class="flex items-center space-x-2" title="Tu nivel se basa en los problemas resueltos">
-                    <span class="text-xl" role="img" aria-label="star">⭐</span>
-                    <span class="text-sm font-medium text-gray-300">Nivel: <span id="user-level-header" class="font-bold text-white">0</span></span>
-                </div>
-                <div class="w-px h-6 bg-gray-600"></div> <!-- Separador -->
-                <span id="user-status-header" class="text-gray-300 text-sm hidden sm:block">Invitado</span>
-                <button id="login-btn-header" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">Iniciar Sesión</button>
-                <button id="logout-btn-header" class="hidden bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">Cerrar Sesión</button>
-            </div>
-        </header>
-
-        <!-- Contenedor principal de la lista (con scroll) -->
-        <main class="flex-1 overflow-y-auto">
-            
-            <!-- 1. Banner (Hero Section) -->
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-10 md:p-16 text-white shadow-lg">
-                <div class="max-w-7xl mx-auto">
-                    <h2 class="text-4xl md:text-5xl font-bold">Python</h2>
-                    <p class="text-xl text-blue-100 mt-2 max-w-2xl">Domina la lógica y resuelve problemas, un desafío a la vez.</p>
-                </div>
-            </div>
-
-            <!-- 2. Contenido Principal (Stats + Grid) -->
-            <div class="max-w-7xl mx-auto p-6 md:p-10">
-                
-                <!-- 2a. Stats Card (Mi Nivel) -->
-                <div class="bg-gray-800 rounded-lg shadow-xl p-6 mb-8 border border-gray-700">
-                    <h3 class="text-xl font-semibold text-white mb-4">Tu Progreso</h3>
-                    <div class="flex items-center space-x-4">
-                        <div class="p-3 bg-blue-600 rounded-full">
-                            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" />
-                            </svg>
-                        </div>
-                        <div>
-                            <span class="text-gray-400 text-sm">NIVEL ACTUAL</span>
-                            <p id="user-level-main" class="text-3xl font-bold text-white">0</p>
-                        </div>
-                    </div>
-                </div>
-            
-                <!-- 2b. Problem Grid -->
-                <h3 class="text-3xl font-bold text-white mb-6">Lista de Problemas</h3>
-                <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    <!-- Las tarjetas de problemas se generan aquí -->
-                </div>
-            </div>
-        </main>
-    </div>
-
-
-    <!-- 3. Vista del Editor de Problemas -->
-    <div id="app-container" class="h-full flex-col hidden">
-        <!-- Barra de botones superior -->
-        <header class="bg-gray-800 shadow-md p-2 flex justify-between items-center w-full z-10 sticky top-0">
-            <button id="back-to-list-btn" class="text-sm bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors flex items-center">
-                <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                </svg>
-                Volver a la lista
-            </button>
-            <div class="flex space-x-3">
-                <button id="run-code" class="text-sm bg-blue-600 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50">
-                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-                    </svg>
-                    Ejecutar
-                </button>
-                <button id="submit-code" class="text-sm bg-green-600 text-white font-medium px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center disabled:opacity-50">
-                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    </svg>
-                    Enviar Solución
-                </button>
-            </div>
-        </header>
-
-        <!-- Contenido principal del editor (scrollable) -->
-        <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            <!-- Columna Izquierda: Descripción (con scroll) -->
-            <div class="lg:w-2/5 p-6 overflow-y-auto">
-                <h1 id="problem-title" class="text-2xl font-bold text-white mb-4">Cargando...</h1>
-                <div id="problem-description" class="prose prose-invert prose-p:text-gray-300 prose-headings:text-white prose-li:text-gray-300 prose-code:text-yellow-300">
-                    <p>Cargando descripción...</p>
-                </div>
-
-                <!-- N U E V O: Sección de Pista -->
-                <div class="mt-8">
-                    <button id="hint-btn" class="w-full bg-yellow-600 text-gray-900 font-medium px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-wait" disabled>
-                        <!-- El texto se setea por JS -->
-                    </button>
-                    <div id="hint-content" class="hidden mt-4 p-4 bg-gray-800 border border-yellow-500 rounded-lg text-yellow-200">
-                        <!-- El contenido de la pista se setea por JS -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Columna Derecha: Editor y Consola (flex-col) -->
-            <div class="lg:w-3/5 h-full flex flex-col p-6">
-                <!-- Contenedor unificado para editor y consola -->
-                <div class="w-full h-full flex flex-col bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
-                    <!-- Editor -->
-                    <div class="flex-grow min-h-[300px] relative"> 
-                        <textarea id="code-editor"></textarea>
-                    </div>
-                    <!-- Consola -->
-                    <div class="h-1/3 min-h-[150px] p-4 font-mono text-sm overflow-y-auto border-t-2 border-gray-700">
-                        <pre id="console-output" class="whitespace-pre-wrap">¡Bienvenido a BitCode! Presiona "Ejecutar" para probar tu código.</pre>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- 4. Modal de Autenticación (Oculto) -->
-    <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div class="bg-gray-800 w-full max-w-md p-8 rounded-lg shadow-xl relative">
-            <button id="close-auth-modal" class="absolute top-4 right-4 text-gray-400 hover:text-white">
-                <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-            </button>
-
-            <h2 class="text-2xl font-bold text-white mb-2">¡Únete a BitCode!</h2>
-            <p class="text-gray-400 mb-6">Regístrate o inicia sesión para guardar tu progreso.</p>
-
-            <!-- Pestañas -->
-            <div class="border-b border-gray-700 mb-6">
-                <nav class="flex -mb-px space-x-6">
-                    <button data-auth-tab="#auth-login" class="py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-400">
-                        Iniciar Sesión
-                    </button>
-                    <button data-auth-tab="#auth-register" class="py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-400 hover:text-gray-300">
-                        Registrarse
-                    </button>
-                </nav>
-            </div>
-
-            <!-- Contenido de Pestañas -->
-            <div id="auth-content-wrapper">
-                
-                <!-- Iniciar Sesión -->
-                <div id="auth-login" data-auth-content class="">
-                    <form onsubmit="return false;">
-                        <div class="mb-4">
-                            <label for="login-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
-                            <input type="email" id="login-email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="tu@email.com">
-                        </div>
-                        <div class="mb-6">
-                            <label for="login-password" class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
-                            <input type="password" id="login-password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="••••••••">
-                        </div>
-                        <p id="login-error" class="text-red-400 text-sm mb-4"></p>
-                        <button id="login-btn" class="w-full bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-                            Iniciar Sesión
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Registrarse -->
-                <div id="auth-register" data-auth-content class="hidden">
-                    <form onsubmit="return false;">
-                        <div class="mb-4">
-                            <label for="register-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
-                            <input type="email" id="register-email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="tu@email.com">
-                        </div>
-                        <div class="mb-6">
-                            <label for="register-password" class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
-                            <input type="password" id="register-password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Mínimo 6 caracteres">
-                        </div>
-                        <p id="reg-error" class="text-red-400 text-sm mb-4"></p>
-                        <button id="register-btn" class="w-full bg-green-600 text-white font-medium py-2 px-4 rounded-md hover:bg-green-700 transition-colors">
-                            Crear Cuenta
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- 5. Elementos de Audio (Ocultos) -->
-    <audio id="audio-enter" src="assets/enter.mp3" preload="auto"></audio>
-    <audio id="audio-execute" src="assets/execute.mp3" preload="auto"></audio>
-    <audio id="audio-complete" src="assets/complete.mp3" preload="auto"></audio>
-
-    
-    <!-- 
-        ============================================================
-        SCRIPT PRINCIPAL DE LA APLICACIÓN
-        ============================================================
-    -->
-    <script type="module">
-        // Importa las funciones que necesitas de los SDKs
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            onAuthStateChanged, 
-            signInWithEmailAndPassword, 
-            createUserWithEmailAndPassword, 
-            signOut
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            doc, 
-            getDoc, 
-            setDoc
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // --- Configuración de Firebase (la que proporcionaste) ---
-        const firebaseConfig = {
-          apiKey: "AIzaSyC9iNBJie4aHiW-igtdRN3farWRq9AlbIU",
-          authDomain: "bitcode-9f43a.firebaseapp.com",
-          projectId: "bitcode-9f43a",
-          storageBucket: "bitcode-9f43a.firebasestorage.app",
-          messagingSenderId: "990831599191",
-          appId: "1:990831599191:web:17567e76c1cd6fe8ea0d12",
-          measurementId: "G-X0MRZNY0LD"
-        };
-        
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        
-        // Usar appId del config O el global __app_id si existe, para las rutas de Firestore
-        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
-        
-        // --- 1. Variables Globales (Declaradas) ---
-        let problems = []; 
-        let pyodide;
-        let editor;
-        let currentProblemIndex = 0;
-        
-        // N U E V O: Timer de la pista
-        let hintTimer = null;
-        
-        // Estado de Autenticación y Progreso
-        let userId = null;
-        let isGuest = true; 
-        let userEmail = "Invitado";
-        let solvedProblemsList = []; 
-
-        // Referencias a Audio HTML5
-        let audioEnter, audioExecute, audioComplete;
-
-        // Elementos de la UI
-        let loadingScreen, loadingText, problemListView, appContainer,
-            problemGrid, loginButtonHeader, logoutButtonHeader, userStatusHeader,
-            problemTitle, problemDescription, codeEditor, consoleOutput,
-            backToListBtn, runButton, submitButton, authModal,
-            closeAuthModalBtn, authTabs, authContents, loginEmailField,
-            loginPasswordField, loginBtn, loginError, regEmailField,
-            regPasswordField, regBtn, regError,
-            userLevelHeader, userLevelMain,
-            // N U E V O: Elementos de Pista
-            hintButton, hintContent;
-
-        
-        // Iconos SVG para la lista
-        const lockIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>`;
-        const checkIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
-
-        // --- 2. Funciones de Sonido (Usando HTML5 Audio) ---
-        function playEnterSound() {
-            if (audioEnter) {
-                audioEnter.currentTime = 0;
-                audioEnter.play().catch(e => console.warn("Audio 'enter' no se pudo reproducir."));
-            }
-        }
-
-        function playExecuteSound() {
-            if (audioExecute) {
-                audioExecute.currentTime = 0;
-                audioExecute.play().catch(e => console.warn("Audio 'execute' no se pudo reproducir."));
-            }
-        }
-
-        function playCompleteSound() {
-            if (audioComplete) {
-                audioComplete.currentTime = 0;
-                audioComplete.play().catch(e => console.warn("Audio 'complete' no se pudo reproducir."));
-            }
-        }
-        
-        // --- 3. Funciones de Autenticación y UI ---
-
-        function showAuthModal() { 
-            authModal.classList.remove('hidden'); 
-            problemListView.classList.add('blurred'); 
-        }
-        function hideAuthModal() { 
-            authModal.classList.add('hidden'); 
-            problemListView.classList.remove('blurred'); 
-            loginError.innerText = "";
-            regError.innerText = "";
-        }
-
-        function updateLevelUI() {
-            const level = solvedProblemsList.length;
-            if (userLevelHeader) userLevelHeader.innerText = level;
-            if (userLevelMain) userLevelMain.innerText = level;
-        }
-
-        function updateAuthUI(email, isUserGuest) {
-            userStatusHeader.innerText = email;
-            if (isUserGuest) {
-                loginButtonHeader.classList.remove('hidden');
-                logoutButtonHeader.classList.add('hidden');
-            } else {
-                loginButtonHeader.classList.add('hidden');
-                logoutButtonHeader.classList.remove('hidden');
-            }
-        }
-
-        async function handleLogin() {
-            const email = loginEmailField.value;
-            const password = loginPasswordField.value;
-            loginError.innerText = "";
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                hideAuthModal();
-            } catch (error) {
-                console.error("Error de login:", error.message);
-                loginError.innerText = "Email o contraseña incorrectos.";
-            }
-        }
-
-        async function handleRegister() {
-            const email = regEmailField.value;
-            const password = regPasswordField.value;
-            regError.innerText = "";
-            if (password.length < 6) {
-                regError.innerText = "La contraseña debe tener al menos 6 caracteres.";
-                return;
-            }
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                hideAuthModal();
-            } catch (error) {
-                console.error("Error de registro:", error.message);
-                if (error.code === 'auth/email-already-in-use') {
-                    regError.innerText = "Este email ya está en uso.";
-                } else {
-                    regError.innerText = "Error al registrarse. Inténtalo de nuevo.";
-                }
-            }
-        }
-
-        async function handleLogout() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("Error al cerrar sesión:", error);
-            }
-        }
-
-        // --- 4. Funciones de Progreso (Híbridas) ---
-
-        async function loadUserProgress() {
-            if (isGuest) {
-                // Cargar desde localStorage
-                console.log("Cargando progreso de invitado (localStorage)...");
-                const solved = localStorage.getItem('solvedProblems');
-                if (solved) {
-                    try {
-                        solvedProblemsList = JSON.parse(solved);
-                        if (!Array.isArray(solvedProblemsList)) solvedProblemsList = [];
-                    } catch (e) {
-                        solvedProblemsList = [];
-                    }
-                } else {
-                    solvedProblemsList = [];
-                }
-                console.log("Progreso local cargado:", solvedProblemsList);
-                return; 
-            }
-
-            // Si no es invitado, cargar de Firestore
-            if (!userId) {
-                console.warn("loadUserProgress: Logueado pero sin userId. Saltando.");
-                solvedProblemsList = [];
-                return;
-            }
-            
-            console.log(`Cargando progreso de Firestore para userId: ${userId} ...`);
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
-            try {
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
-                    const remoteSolved = data.solved || [];
-                    const mergedSolved = [...new Set([...localSolved, ...remoteSolved])];
-                    
-                    solvedProblemsList = mergedSolved;
-                    
-                    if (mergedSolved.length > remoteSolved.length || localSolved.length > 0) {
-                        await saveUserProgress(); 
-                    }
-                    localStorage.removeItem('solvedProblems');
-
-                } else {
-                    const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
-                    solvedProblemsList = localSolved;
-                    if (localSolved.length > 0) {
-                        await saveUserProgress(); 
-                        localStorage.removeItem('solvedProblems');
-                    }
-                }
-                console.log("Progreso de Firestore cargado/fusionado:", solvedProblemsList);
-            } catch (error) {
-                console.error("Error al cargar progreso de Firestore:", error);
-                solvedProblemsList = [];
-            }
-        }
-
-        async function saveUserProgress() {
-            if (isGuest) {
-                // Guardar en localStorage
-                console.log("Guardando progreso de invitado (localStorage)...");
-                try {
-                    localStorage.setItem('solvedProblems', JSON.stringify(solvedProblemsList));
-                    console.log("Progreso local guardado.");
-                } catch (e) {
-                    console.error("Error al guardar en localStorage:", e);
-                }
-                updateLevelUI();
-                return; 
-            }
-
-            // Si no es invitado, guardar en Firestore
-            if (!userId) {
-                console.warn("saveUserProgress: Logueado pero sin userId. Saltando guardado.");
-                return;
-            }
-
-            console.log(`Guardando progreso en Firestore para userId: ${userId} ...`);
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
-            try {
-                await setDoc(docRef, { solved: solvedProblemsList });
-                console.log("Progreso de Firestore guardado.");
-                updateLevelUI();
-            } catch (error) {
-                console.error("Error al guardar progreso en Firestore:", error);
-            }
-        }
-
-        function getSolvedProblems() {
-            return solvedProblemsList;
-        }
-
-
-        // --- 5. Funciones de Lógica de la App ---
-
-        function assignDomElements() {
-            audioEnter = document.getElementById('audio-enter');
-            audioExecute = document.getElementById('audio-execute');
-            audioComplete = document.getElementById('audio-complete');
-
-            loadingScreen = document.getElementById('loading-screen');
-            loadingText = document.getElementById('loading-text');
-            
-            problemListView = document.getElementById('problem-list-view');
-            appContainer = document.getElementById('app-container');
-            
-            problemGrid = document.getElementById('problem-grid');
-            loginButtonHeader = document.getElementById('login-btn-header');
-            logoutButtonHeader = document.getElementById('logout-btn-header');
-            userStatusHeader = document.getElementById('user-status-header');
-
-            problemTitle = document.getElementById('problem-title');
-            problemDescription = document.getElementById('problem-description');
-            codeEditor = document.getElementById('code-editor');
-            consoleOutput = document.getElementById('console-output');
-            
-            backToListBtn = document.getElementById('back-to-list-btn');
-            runButton = document.getElementById('run-code');
-            submitButton = document.getElementById('submit-code');
-            
-            authModal = document.getElementById('auth-modal');
-            closeAuthModalBtn = document.getElementById('close-auth-modal');
-            authTabs = document.querySelectorAll('[data-auth-tab]');
-            authContents = document.querySelectorAll('[data-auth-content]');
-            loginEmailField = document.getElementById('login-email');
-            loginPasswordField = document.getElementById('login-password');
-            loginBtn = document.getElementById('login-btn');
-            loginError = document.getElementById('login-error');
-            regEmailField = document.getElementById('register-email');
-            regPasswordField = document.getElementById('register-password');
-            regBtn = document.getElementById('register-btn');
-            regError = document.getElementById('reg-error');
-
-            userLevelHeader = document.getElementById('user-level-header');
-            userLevelMain = document.getElementById('user-level-main');
-
-            // N U E V O: Asignar elementos de Pista
-            hintButton = document.getElementById('hint-btn');
-            hintContent = document.getElementById('hint-content');
-        }
-
-        function attachEventListeners() {
-            backToListBtn.addEventListener('click', showProblemListView);
-            runButton.addEventListener('click', runCode);
-            submitButton.addEventListener('click', submitCode);
-
-            loginButtonHeader.addEventListener('click', showAuthModal);
-            logoutButtonHeader.addEventListener('click', handleLogout);
-            closeAuthModalBtn.addEventListener('click', hideAuthModal);
-            loginBtn.addEventListener('click', handleLogin);
-            regBtn.addEventListener('click', handleRegister);
-            
-            // N U E V O: Listener para el botón de pista
-            hintButton.addEventListener('click', showHint);
-            
-            authTabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const target = document.querySelector(tab.dataset.authTab);
-                    
-                    authContents.forEach(content => content.classList.add('hidden'));
-                    target.classList.remove('hidden');
-                    
-                    authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
-                    tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
-                    
-                    loginError.innerText = "";
-                    regError.innerText = "";
-                });
-            });
-        }
-
-        async function main() {
-            assignDomElements();
-
-            try {
-                await setupAuthListener();
-
-                const pyodidePromise = loadPyodide();
-                const problemsPromise = fetch("my_problems.json")
-                    .then(res => {
-                        if (!res.ok) throw new Error(`Error HTTP! status: ${res.status}`);
-                        return res.json();
-                    })
-                    .catch(e => {
-                        console.error("Error al cargar 'my_problems.json':", e);
-                        loadingText.innerText = `Error al cargar 'my_problems.json'. ¿Existe y es un JSON válido? \n${e}`;
-                        throw e; 
-                    });
-
-                pyodide = await pyodidePromise;
-                console.log("Pyodide cargado.");
-                
-                loadingText.innerText = "Cargando problemas...";
-                problems = await problemsPromise;
-                console.log("Problemas cargados:", problems);
-
-                editor = CodeMirror.fromTextArea(codeEditor, {
-                    lineNumbers: true,
-                    mode: "python",
-                    theme: "darcula",
-                    autoCloseBrackets: true,
-                    autoCloseTags: true,
-                    tabSize: 4,
-                    indentUnit: 4
-                });
-                
-                attachEventListeners();
-
-                loadingScreen.classList.add('hidden');
-                problemListView.classList.remove('hidden');
-                
-                renderProblemList();
-
-            } catch (error) {
-                console.error("Error en la inicialización:", error);
-                if (!loadingText.innerText.startsWith("Error")) {
-                    loadingText.innerText = "Error fatal al cargar la aplicación. Revisa la consola.";
-                }
-            }
-        }
-        
-        function setupAuthListener() {
-            return new Promise((resolve) => {
-                onAuthStateChanged(auth, async (user) => {
-                    if (user && !user.isAnonymous) {
-                        userId = user.uid;
-                        isGuest = false;
-                        userEmail = user.email || `Usuario (${user.uid.substring(0, 5)})`;
-                        console.log(`Estado de Auth cambiado: ${userEmail}, Logueado`);
-                        
-                        updateAuthUI(userEmail, isGuest);
-                        await loadUserProgress(); 
-                        updateLevelUI();
-                        renderProblemList(); 
-                        
-                    } else {
-                        console.log("No hay usuario, cambiando a Modo Invitado (localStorage)...");
-                        userId = null;
-                        isGuest = true;
-                        userEmail = "Invitado";
-                        
-                        updateAuthUI(userEmail, isGuest);
-                        await loadUserProgress(); 
-                        updateLevelUI();
-                        renderProblemList(); 
-                    }
-                    resolve(); 
-                });
-            });
-        }
-
-
-        function renderProblemList() {
-            if (problems.length === 0 || !problemGrid) {
-                console.log("RenderProblemList saltado, problemas o grid no cargados.");
-                return;
-            }
-            
-            updateLevelUI();
-            
-            const solvedProblems = getSolvedProblems();
-            const unlockedUpTo = solvedProblems.length; 
-            
-            problemGrid.innerHTML = ''; 
-
-            problems.forEach((problem, index) => {
-                const isSolved = solvedProblems.includes(index);
-                const isUnlocked = isSolved || (index === unlockedUpTo);
-                
-                let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all duration-200 ease-in-out border-l-4";
-                let cardIcon = "";
-                let difficultyColor = "text-green-400";
-                if (problem.difficulty === "Medio") difficultyColor = "text-yellow-400";
-                if (problem.difficulty === "Difícil") difficultyColor = "text-red-400";
-
-                
-                if (isSolved) {
-                    cardClasses += " border-green-500 cursor-pointer hover:bg-gray-700 hover:shadow-green-500/30 hover:scale-[1.03]";
-                    cardIcon = `<div class="font-medium text-sm flex items-center text-green-400">${checkIcon} Resuelto</div>`;
-                } else if (isUnlocked) {
-                    cardClasses += " border-blue-500 cursor-pointer hover:ring-2 hover:ring-blue-500 hover:scale-[1.03]";
-                    cardIcon = `<div class="font-bold text-sm flex items-center text-blue-400">Resolver Ahora &rarr;</div>`;
-                } else {
-                    cardClasses += " opacity-50 cursor-not-allowed border-gray-600";
-                    cardIcon = `<div class="font-medium text-sm flex items-center text-gray-500">${lockIcon} Bloqueado</div>`;
-                }
-
-                const card = document.createElement('div');
-                card.className = cardClasses;
-                
-                card.innerHTML = `
-                    <div>
-                        <h3 class="text-lg font-bold text-white mb-2">${problem.title || 'Sin Título'}</h3>
-                        <span class="text-sm ${difficultyColor}">
-                            ${problem.difficulty || 'Fácil'}
-                        </span>
-                    </div>
-                    ${cardIcon}
-                `;
-
-                if (isUnlocked) {
-                    card.addEventListener('click', () => {
-                        if (isGuest && index > 0) {
-                            showAuthModal(); 
-                        } else {
-                            showEditorView(index); 
-                        }
-                    });
-                }
-
-                problemGrid.appendChild(card);
-            });
-        }
-
-        function showEditorView(index) {
-            playEnterSound(); 
-            problemListView.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-            currentProblemIndex = index;
-            loadProblem(index); 
-            setTimeout(() => {
-                editor.refresh();
-                editor.focus();
-            }, 100);
-        }
-
-        function showProblemListView() {
-            // N U E V O: Limpiar el timer de la pista al volver a la lista
-            if (hintTimer) clearInterval(hintTimer);
-            
-            appContainer.classList.add('hidden');
-            problemListView.classList.remove('hidden');
-            renderProblemList(); 
-        }
-        
-        // N U E V O: Función para mostrar la pista
-        function showHint() {
-            const problem = problems[currentProblemIndex];
-            if (problem && problem.hint) {
-                hintContent.innerText = problem.hint;
-                hintContent.classList.remove('hidden');
-                hintButton.disabled = true; // Desactivar después de usar
-                hintButton.innerHTML = `💡 Pista Revelada`;
-            }
-        }
-
-        function loadProblem(index) {
-            if (index < 0 || index >= problems.length) {
-                console.error("Índice de problema inválido:", index);
-                return;
-            }
-            
-            const problem = problems[index];
-            if (!problem) {
-                console.error("No se encontró el problema en el índice:", index);
-                return;
-            }
-
-            problemTitle.innerText = problem.title || "Problema sin título";
-            problemDescription.innerHTML = problem.description || "<p>Sin descripción.</p>";
-            
-            const difficulty = problem.difficulty || "Fácil";
-            let difficultyColor = "text-green-400"; 
-            if (difficulty === "Medio") {
-                difficultyColor = "text-yellow-400";
-            } else if (difficulty === "Difícil") {
-                difficultyColor = "text-red-400";
-            }
-            problemTitle.innerHTML += ` <span class="text-sm ${difficultyColor} font-normal">(${difficulty})</span>`;
-
-            editor.setValue(problem.starterCode || "# Escribe tu código aquí\n");
-            consoleOutput.innerText = `Problema ${index + 1} cargado.`;
-
-            // --- N U E V A LÓGICA DE PISTA ---
-            hintContent.classList.add('hidden'); // Ocultar pista anterior
-            if (hintTimer) clearInterval(hintTimer); // Limpiar timer anterior
-            
-            if (problem && problem.hint) {
-                hintButton.classList.remove('hidden'); // Mostrar botón
-                let secondsLeft = 90; // 1.5 minutos
-                hintButton.disabled = true;
-                hintButton.innerHTML = `💡 Ver Pista (espera ${secondsLeft}s)`;
-                
-                hintTimer = setInterval(() => {
-                    secondsLeft--;
-                    if (secondsLeft > 0) {
-                        hintButton.innerHTML = `💡 Ver Pista (espera ${secondsLeft}s)`;
-                    } else {
-                        clearInterval(hintTimer);
-                        hintButton.disabled = false;
-                        hintButton.innerHTML = `💡 Ver Pista`;
-                    }
-                }, 1000); // Actualizar cada segundo
-            } else {
-                hintButton.classList.add('hidden'); // Ocultar si no hay pista
-            }
-            // --- FIN DE LÓGICA DE PISTA ---
-        }
-
-        function setButtonsDisabled(disabled) {
-            runButton.disabled = disabled;
-            submitButton.disabled = disabled;
-        }
-
-        async function runCode() {
-            playExecuteSound(); 
-            const userCode = editor.getValue();
-            consoleOutput.innerText = "Ejecutando...";
-            setButtonsDisabled(true);
-
-            try {
-                await pyodide.runPythonAsync(`
-                    import sys, io
-                    sys.stdout = io.StringIO()
-                    sys.stderr = io.StringIO()
-                `);
-                
-                let result = await pyodide.runPythonAsync(userCode);
-                
-                let stdout = await pyodide.runPythonAsync("sys.stdout.getvalue()");
-                let stderr = await pyodide.runPythonAsync("sys.stderr.getvalue()");
-                
-                if (stderr) {
-                    consoleOutput.innerHTML = `<span class="text-red-500">Error:</span>\n${stderr}`;
-                } else if (stdout) {
-                    consoleOutput.innerText = stdout;
-                } else if (result !== undefined && result !== null) {
-                    consoleOutput.innerText = String(result);
-                } else {
-                    consoleOutput.innerText = "(Sin salida)";
-                }
-
-            } catch (e) {
-                consoleOutput.innerHTML = `<span class="text-red-500">Error del intérprete:</span>\n${e.message}`;
-            }
-
-            setButtonsDisabled(false);
-        }
-
-        async function submitCode() {
-            playExecuteSound(); 
-            const userCode = editor.getValue();
-            const problem = problems[currentProblemIndex];
-            
-            if (!problem.testCode) {
-                consoleOutput.innerHTML = `<span class="text-yellow-500">Este problema no tiene tests definidos.</span>`;
-                return;
-            }
-
-            consoleOutput.innerText = "Ejecutando pruebas...";
-            setButtonsDisabled(true);
-
-            const indentedUserCode = userCode.replace(/^/gm, '    ');
-            const indentedTestCode = problem.testCode.replace(/^/gm, '    ');
-
-            const fullScript = `
-import sys, io
-sys.stdout = io.StringIO()
-sys.stderr = io.StringIO()
-output = ""
-try:
-    # --- Código del Usuario ---
-${indentedUserCode}
-    # --- Fin del Código del Usuario ---
-
-    # --- Arnés de Pruebas ---
-${indentedTestCode}
-    # --- Fin del Arnés de Pruebas ---
-except Exception as e:
-    print(f"__FAILURE__: Error de sintaxis o ejecución: {e}")
-
-stdout_value = sys.stdout.getvalue()
-stderr_value = sys.stderr.getvalue()
-
-if stderr_value:
-    output = f"__FAILURE__: Error de Runtime:\\n{stderr_value}"
-else:
-    output = stdout_value
-
-{'output': output}
-            `;
-            
-            try {
-                let resultProxy = await pyodide.runPythonAsync(fullScript);
-                let result = resultProxy.toJs();
-                resultProxy.destroy();
-                
-                let output = result.output;
-
-                if (output.includes("__SUCCESS__")) {
-                    playCompleteSound(); 
-                    consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
-                    
-                    if (!solvedProblemsList.includes(currentProblemIndex)) {
-                        solvedProblemsList.push(currentProblemIndex);
-                        solvedProblemsList.sort((a, b) => a - b); 
-                        await saveUserProgress(); // Guardar y actualizar UI de Nivel
-                    }
-                    
-                    // N U E V O: Limpiar el timer de la pista al completar
-                    if (hintTimer) clearInterval(hintTimer);
-                    
-                    setTimeout(showProblemListView, 2000); 
-
-                } else if (output.includes("__FAILURE__:")) {
-                    let errorMsg = output.split("__FAILURE__:")[1] || "Tests fallidos.";
-                    consoleOutput.innerHTML = `<span class="text-red-400 font-bold">Solución Incorrecta:</span>\n${errorMsg.trim()}`;
-                } else {
-                    consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test (sin __SUCCESS__):</span>\n${output || '(Sin salida)'}`;
-                }
-
-            } catch (e) {
-                consoleOutput.innerHTML = `<span class="text-red-500">Error del intérprete:</span>\n${e.message}`;
-            }
-
-            setButtonsDisabled(false);
-        }
-
-        // --- 7. Ejecución ---
-        document.addEventListener('DOMContentLoaded', main);
-
-    </script>
-</body>
-</html>
+[
+    {
+        "title": "Problema 1: Suma de Dos Números",
+        "description": "<p>Escribe una función <code>solve(a, b)</code> que devuelva la suma de dos números <code>a</code> y <code>b</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(a, b):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(1, 2, 3), (5, 5, 10), (-1, 1, 0)]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Solo necesitas usar el operador de suma `+`."
+    },
+    {
+        "title": "Problema 2: ¿Par o Impar?",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva el string <code>\"Par\"</code> si el número <code>n</code> es par, o <code>\"Impar\"</code> si es impar.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(2, \"Par\"), (3, \"Impar\"), (0, \"Par\"), (-1, \"Impar\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa el operador módulo (`%`). Si `n % 2` es 0, el número es par."
+    },
+    {
+        "title": "Problema 3: Revertir una Cadena",
+        "description": "<p>Escribe una función <code>solve(s)</code> que tome una cadena <code>s</code> y devuelva la cadena al revés.</p><p><strong>Ejemplo:</strong> <code>solve(\"hola\")</code> debería devolver <code>\"aloh\"</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"hola\", \"aloh\"), (\"Python\", \"nohtyP\"), (\"a\", \"a\"), (\"\", \"\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "En Python, puedes revertir una cadena `s` fácilmente usando la notación de *slicing*: `s[::-1]`."
+    },
+    {
+        "title": "Problema 4: Promedio de una Lista",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que devuelva el promedio (la media) de una lista de números <code>nums</code>.</p><p>Si la lista está vacía, devuelve 0.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([1, 2, 3], 2.0), ([10, 20, 30, 40], 25.0), ([5], 5.0), ([], 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "El promedio es `sum(nums) / len(nums)`. Asegúrate de manejar el caso de la lista vacía para evitar un error de división por cero."
+    },
+    {
+        "title": "Problema 5: Encontrar el Máximo",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que devuelva el número más grande en una lista <code>nums</code>.</p><p>Si la lista está vacía, devuelve <code>None</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([1, 5, 2], 5), ([-10, -5, -2], -2), ([5], 5), ([], None)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Comprueba si la lista está vacía. Si no lo está, puedes usar la función `max(nums)`."
+    },
+    {
+        "title": "Problema 6: Contar Vocales",
+        "description": "<p>Escribe una función <code>solve(s)</code> que devuelva el número de vocales (a, e, i, o, u) en una cadena <code>s</code> (sin importar mayúsculas).</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"Hola Mundo\", 4), (\"AEIOU\", 5), (\"Python\", 1), (\"xyz\", 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Crea un `set` de vocales (`{'a', 'e', 'i', 'o', 'u'}`). Itera sobre la cadena (convertida a minúsculas con `s.lower()`) y suma 1 si el carácter está en el set."
+    },
+    {
+        "title": "Problema 7: Área de un Círculo",
+        "description": "<p>Escribe una función <code>solve(radio)</code> que devuelva el área de un círculo.</p><p>Usa <code>3.14159</code> como valor de PI. Redondea el resultado a 2 decimales (usa <code>round(tu_resultado, 2)</code>).</p>",
+        "difficulty": "Fácil",
+        "starterCode": "import math\n\ndef solve(radio):\n    # Escribe tu código aquí\n    # Puedes usar 3.14159 o math.pi\n    pi = 3.14159\n    return 0\n",
+        "testCode": "results = []\ntests = [(1, 3.14), (10, 314.16), (0, 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "La fórmula del área es $ \pi \cdot radio^2 $. En Python, `radio**2` calcula el cuadrado. No olvides redondear."
+    },
+    {
+        "title": "Problema 8: Celsius a Fahrenheit",
+        "description": "<p>Escribe una función <code>solve(celsius)</code> que convierta grados Celsius a Fahrenheit.</p><p>La fórmula es: <code>F = (C * 9/5) + 32</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(celsius):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(0, 32.0), (100, 212.0), (20, 68.0), (-40, -40.0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Simplemente implementa la fórmula matemática dada: `(celsius * 9 / 5) + 32`."
+    },
+    {
+        "title": "Problema 9: Calculadora de Propinas",
+        "description": "<p>Escribe una función <code>solve(total, porcentaje)</code> que calcule la propina.</p><p><code>total</code> es el precio de la comida, <code>porcentaje</code> es un entero (ej. 15 para 15%). Devuelve solo el valor de la propina.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(total, porcentaje):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(100, 15, 15.0), (50, 20, 10.0), (30, 10, 3.0)]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Para obtener el 15% de 100, calculas $(100 \cdot 15) / 100$. Aplica la misma lógica para `total` y `porcentaje`."
+    },
+    {
+        "title": "Problema 10: Contar Palabras",
+        "description": "<p>Escribe una función <code>solve(texto)</code> que devuelva cuántas palabras hay en la cadena <code>texto</code>.</p><p>Las palabras están separadas por espacios.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(texto):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"Hola mundo\", 2), (\"Esto es una prueba\", 4), (\"Python\", 1), (\"\", 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa el método `split()` de las cadenas, que devuelve una lista de palabras. Luego, obtén la longitud (`len()`) de esa lista."
+    },
+    {
+        "title": "Problema 11: ¿Es Palíndromo?",
+        "description": "<p>Escribe una función <code>solve(s)</code> que devuelva <code>True</code> si <code>s</code> es un palíndromo (se lee igual al revés) y <code>False</code> si no.</p><p>Ignora mayúsculas/minúsculas y espacios.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"Ana\", True), (\"Anita lava la tina\", True), (\"casa\", False), (\"\", True)]\ndef run_test(s, expected):\n    try:\n        result = solve(s)\n        if result == expected:\n            return f\"Test (solve('{s}')): <span class='text-green-400'>PASSED</span>\"\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        return f\"Test (solve('{s}')): <span class='text-red-400'>FAILED</span> - {e}\"\nfor t in tests:\n    results.append(run_test(t[0], t[1]))\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Primero, 'limpia' la cadena: conviértela a minúsculas (`lower()`) y elimina espacios (`replace(' ', '')`). Luego, compara la cadena limpia con su reverso (`[::-1]`)"
+    },
+    {
+        "title": "Problema 12: FizzBuzz",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva una lista de strings de 1 a <code>n</code>.</p><p>Si el número es divisible por 3, usa \"Fizz\". Si es por 5, usa \"Buzz\". Si es por ambos, usa \"FizzBuzz\". Si no, usa el número como string.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [(3, ['1', '2', 'Fizz']), (5, ['1', '2', 'Fizz', '4', 'Buzz']), (15, ['1', '2', 'Fizz', '4', 'Buzz', 'Fizz', '7', '8', 'Fizz', 'Buzz', '11', 'Fizz', '13', '14', 'FizzBuzz'])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un bucle de 1 a `n`. El orden de las comprobaciones es importante: comprueba `i % 15 == 0` primero, luego `% 3`, luego `% 5`."
+    },
+    {
+        "title": "Problema 13: Factorial",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva el factorial de <code>n</code> (n!).</p><p>El factorial de 0 (0!) es 1.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return 1\n",
+        "testCode": "results = []\ntests = [(5, 120), (0, 1), (1, 1), (7, 5040)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Recuerda el caso base: `solve(0)` es 1. Para $n > 0$, el factorial es $n \cdot (n-1) \cdot ... \cdot 1$. Puedes usar un bucle o recursión."
+    },
+    {
+        "title": "Problema 14: Suma de Rango (1 a N)",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva la suma de todos los números desde 1 hasta <code>n</code> (incluido).</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(1, 1), (10, 55), (100, 5050)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Puedes usar un bucle `for` de 1 a `n` e ir sumando. O, para una solución más rápida, usa la fórmula de Gauss: $ n \cdot (n + 1) / 2 $."
+    },
+    {
+        "title": "Problema 15: Validar Email Simple",
+        "description": "<p>Escribe una función <code>solve(email)</code> que devuelva <code>True</code> si el email parece válido, y <code>False</code> si no.</p><p>Para ser válido, solo necesita contener un símbolo <code>@</code> y al menos un <code>.</code> después del <code>@</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(email):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"usuario@dominio.com\", True), (\"hola.mundo@gmail.com\", True), (\"sin-arroba.com\", False), (\"sin-punto@dominio\", False), (\"@dominio.com\", False)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Encuentra la posición del `'@'` usando `find()`. Si no existe (`-1`) o es la primera letra (`0`), es inválido. Luego, comprueba si existe un `'.'` en la subcadena que está *después* del `'@'`."
+    },
+    {
+        "title": "Problema 16: Longitud de la Última Palabra",
+        "description": "<p>Escribe una función <code>solve(s)</code> que devuelva la longitud de la última palabra en una cadena <code>s</code>.</p><p>Ignora espacios al final.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"Hola Mundo\", 5), (\"    fly me    to    the moon  \", 4), (\"a\", 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa `s.rstrip()` para eliminar espacios al final, luego `s.split()` para obtener una lista de palabras, y finalmente obtén la longitud de la última palabra (`[-1]`)"
+    },
+    {
+        "title": "Problema 17: Piedra, Papel, Tijera",
+        "description": "<p>Escribe una función <code>solve(j1, j2)</code> que determine el ganador de una partida.</p><p><code>j1</code> y <code>j2</code> serán \"piedra\", \"papel\" o \"tijera\".</p><p>Devuelve <code>\"Jugador 1\"</code>, <code>\"Jugador 2\"</code> o <code>\"Empate\"</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(j1, j2):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"piedra\", \"tijera\", \"Jugador 1\"), (\"papel\", \"piedra\", \"Jugador 1\"), (\"tijera\", \"papel\", \"Jugador 1\"), (\"tijera\", \"piedra\", \"Jugador 2\"), (\"piedra\", \"papel\", \"Jugador 2\"), (\"papel\", \"tijera\", \"Jugador 2\"), (\"piedra\", \"piedra\", \"Empate\")]\nfor i, (j1, j2, expected) in enumerate(tests):\n    try:\n        result = solve(j1, j2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Primero comprueba si `j1 == j2` (Empate). Luego, comprueba las 3 condiciones de victoria para J1 (ej. `j1 == 'piedra' and j2 == 'tijera'`). Si ninguna se cumple, gana J2."
+    },
+    {
+        "title": "Problema 18: Adivina el Número",
+        "description": "<p>Escribe una función <code>solve(secreto, intento)</code>.</p><p>Devuelve <code>\"Alto\"</code> si <code>intento</code> es mayor que <code>secreto</code>, <code>\"Bajo\"</code> si es menor, o <code>\"Correcto\"</code> si son iguales.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(secreto, intento):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(50, 70, \"Alto\"), (50, 30, \"Bajo\"), (50, 50, \"Correcto\")]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa una estructura `if/elif/else` simple para comparar `intento` con `secreto` usando `>` y `<`."
+    },
+    {
+        "title": "Problema 19: ¿Es Anagrama?",
+        "description": "<p>Escribe una función <code>solve(s1, s2)</code> que devuelva <code>True</code> si <code>s1</code> y <code>s2</code> son anagramas (contienen las mismas letras, mismo número de veces).</p><p>Ignora mayúsculas/minúsculas.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s1, s2):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"roma\", \"amor\", True), (\"listen\", \"silent\", True), (\"hola\", \"ola\", False), (\"Raza\", \"zar\", False), (\"\", \"\", True)]\nfor i, (s1, s2, expected) in enumerate(tests):\n    try:\n        result = solve(s1, s2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class='text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Normaliza ambas cadenas (`lower()`). La forma más fácil es comparar las cadenas ordenadas: `sorted(s1_limpia) == sorted(s2_limpia)`."
+    },
+    {
+        "title": "Problema 20: Teorema de Pitágoras",
+        "description": "<p>Escribe una función <code>solve(a, b)</code> que calcule la hipotenusa (c) de un triángulo rectángulo dados los catetos <code>a</code> y <code>b</code>.</p><p>Recuerda: <code>a² + b² = c²</code>. Devuelve <code>c</code> redondeado a 2 decimales.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "import math\n\ndef solve(a, b):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(3, 4, 5.0), (5, 12, 13.0), (1, 1, 1.41)]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Calcula $c^2$ (que es `a**2 + b**2`). Luego, obtén la raíz cuadrada usando `math.sqrt()` o `**(0.5)`. No olvides redondear."
+    },
+    {
+        "title": "Problema 21: Número Primo",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva <code>True</code> si <code>n</code> es un número primo, y <code>False</code> si no.</p><p>0 y 1 no son primos. Un primo solo es divisible por 1 y por sí mismo.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(2, True), (3, True), (4, False), (7, True), (15, False), (0, False), (1, False)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja los casos base: `n < 2` es `False`. Luego, itera desde `i = 2` hasta la raíz cuadrada de `n`. Si `n % i == 0` en algún punto, devuelve `False`."
+    },
+    {
+        "title": "Problema 22: Ahorcado (Vista)",
+        "description": "<p>Escribe una función <code>solve(secreta, letras)</code> que muestre el estado del juego del ahorcado.</p><p><code>secreta</code> es la palabra (ej. \"PYTHON\"). <code>letras</code> es una lista de letras adivinadas (ej. <code>['P', 'O', 'X']</code>).</p><p>Devuelve un string con guiones bajos para las letras no adivinadas (ej. <code>\"P_THO_\"</code>).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(secreta, letras):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"PYTHON\", ['P', 'O'], \"P_THO_\"), (\"CASA\", [], \"____\"), (\"HOLA\", ['H', 'O', 'L', 'A'], \"HOLA\"), (\"ERROR\", ['X', 'Y', 'Z'], \"_____\")]\nfor i, (s, l, expected) in enumerate(tests):\n    try:\n        result = solve(s, l)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Crea una lista de resultado (o un string). Itera sobre cada `letra` en `secreta`. Si `letra` está en el set de `letras` adivinadas, añade `letra`; si no, añade `_`."
+    },
+    {
+        "title": "Problema 23: Eliminar Duplicados",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que tome una lista <code>nums</code> y devuelva una nueva lista con los duplicados eliminados, pero manteniendo el orden original.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 2, 2, 3, 1], [1, 2, 3]), ([5, 5, 5], [5]), ([], []), ([1, 2, 3], [1, 2, 3])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un `set` para llevar la cuenta de los números `vistos` y una `lista_resultado`. Itera sobre `nums`. Si `num` no está en `vistos`, añádelo a `vistos` y a `lista_resultado`."
+    },
+    {
+        "title": "Problema 24: Serie de Fibonacci",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva el <code>n</code>-ésimo número en la serie de Fibonacci (empezando con 0 y 1).</p><p><code>F(0) = 0, F(1) = 1, F(2) = 1, F(3) = 2...</code></p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(0, 0), (1, 1), (2, 1), (5, 5), (10, 55)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja los casos base $n=0$ y $n=1$. Para $n > 1$, usa un bucle e inicializa `a = 0`, `b = 1`. En el bucle, actualiza `a, b = b, a + b`."
+    },
+    {
+        "title": "Problema 25: Tres en Raya (Validar Ganador)",
+        "description": "<p>Escribe una función <code>solve(board)</code> que determine si hay un ganador en un tablero de 3x3.</p><p><code>board</code> es una lista de listas (ej. <code>[['X', 'O', ''], ['X', '', 'O'], ['X', '', '']]</code>). <code>''</code> es vacío.</p><p>Devuelve <code>'X'</code> si 'X' ganó, <code>'O'</code> si 'O' ganó, o <code>'Nadie'</code> si no hay ganador (ignora empates por ahora).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(board):\n    # Escribe tu código aquí\n    return \"Nadie\"\n",
+        "testCode": "results = []\ntests = [\n    ([['X', 'O', 'O'], ['X', 'O', ''], ['X', '', '']], 'X'),\n    ([['X', 'X', 'X'], ['O', 'O', ''], ['', '', '']], 'X'),\n    ([['O', '', 'X'], ['', 'O', 'X'], ['', '', 'O']], 'O'),\n    ([['X', 'O', 'X'], ['O', 'X', 'O'], ['O', 'X', 'O']], 'Nadie'),\n    ([['', '', ''], ['', '', ''], ['', '', '']], 'Nadie')\n]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Debes comprobar 8 condiciones: 3 filas, 3 columnas y 2 diagonales. Un bucle `for i in range(3)` puede comprobar filas y columnas."
+    },
+    {
+        "title": "Problema 26: Máximo Común Divisor (MCD)",
+        "description": "<p>Escribe una función <code>solve(a, b)</code> que calcule el Máximo Común Divisor (MCD) de dos números enteros no negativos <code>a</code> y <code>b</code>.</p><p>Puedes usar el algoritmo de Euclides.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(a, b):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(12, 18, 6), (7, 5, 1), (100, 25, 25), (0, 5, 5)]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Algoritmo de Euclides: `while b:` (mientras b no sea 0), actualiza `a, b = b, a % b`. El resultado final es `a`."
+    },
+    {
+        "title": "Problema 27: Mínimo Común Múltiplo (MCM)",
+        "description": "<p>Escribe una función <code>solve(a, b)</code> que calcule el Mínimo Común Múltiplo (MCM) de dos números enteros <code>a</code> y <code>b</code>. Puedes usar la relación <code>MCM(a, b) = (|a * b|) / MCD(a, b)</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(a, b):\n    # Una función auxiliar para el MCD (si la necesitas, aunque se recomienda la fórmula)\n    # def gcd(x, y):\n    #    while(y):\n    #        x, y = y, x % y\n    #    return x\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(4, 6, 12), (7, 5, 35), (10, 20, 20), (1, 10, 10)]\nfor i, (a, b, expected) in enumerate(tests):\n    try:\n        result = solve(a, b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Primero, implementa la función MCD (ver problema 26). Luego, usa la fórmula `(a * b) // mcd(a, b)`. Cuidado con el caso `a=0` o `b=0`."
+    },
+    {
+        "title": "Problema 28: Sumar Dígitos",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva la suma de todos los dígitos de un número entero <code>n</code>.</p><p>Ejemplo: <code>solve(123)</code> debe devolver <code>1 + 2 + 3 = 6</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(123, 6), (9876, 30), (0, 0), (5, 5)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Convierte el número a cadena (`str(n)`). Itera sobre cada carácter de la cadena, conviértelo de nuevo a entero (`int(digito)`) y súmalo a un total."
+    },
+    {
+        "title": "Problema 29: Eliminar Caracteres Duplicados Adyacentes",
+        "description": "<p>Escribe una función <code>solve(s)</code> que elimine todos los caracteres duplicados *adyacentes* en una cadena <code>s</code>. Los nuevos adyacentes pueden formar más duplicados.</p><p>Ejemplo: <code>solve(\"abbaca\")</code> -> <code>\"ca\"</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"abbaca\", \"ca\"), (\"azxxzy\", \"ay\"), (\"a\", \"a\"), (\"aaaaa\", \"\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa una pila (stack, puedes simularla con una lista). Itera sobre la cadena. Si la pila no está vacía y el carácter actual es igual al tope de la pila (`stack[-1]`), saca (pop) de la pila. Si no, añade (push) el carácter."
+    },
+    {
+        "title": "Problema 30: Intercambiar Pares de Nodos (Lista)",
+        "description": "<p>Escribe una función <code>solve(arr)</code> que tome una lista <code>arr</code> e intercambie los elementos en pares. Si hay un número impar de elementos, el último se queda solo.</p><p>Ejemplo: <code>solve([1, 2, 3, 4])</code> debe devolver <code>[2, 1, 4, 3]</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(arr):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 2, 3, 4], [2, 1, 4, 3]), ([1, 2, 3], [2, 1, 3]), ([], []), ([5], [5])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera sobre la lista usando `range(0, len(arr) - 1, 2)`. En cada paso `i`, intercambia `arr[i]` y `arr[i+1]`."
+    },
+    {
+        "title": "Problema 31: Contar Frecuencia de Palabras",
+        "description": "<p>Escribe una función <code>solve(texto)</code> que tome una cadena y devuelva un diccionario con la frecuencia de cada palabra. Las palabras deben ser minúsculas y se deben ignorar los signos de puntuación (asume que solo son espacios, comas y puntos).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(texto):\n    # Escribe tu código aquí\n    return {}\n",
+        "testCode": "results = []\ntests = [(\"Hola mundo, hola.\", {'hola': 2, 'mundo': 1}), (\"A B a\", {'a': 2, 'b': 1}), (\"uno dos tres. uno\", {'uno': 2, 'dos': 1, 'tres': 1})]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Limpia la cadena: `lower()`, `replace(',', '')`, `replace('.', '')`. Luego usa `split()` para obtener palabras. Itera sobre las palabras y usa un diccionario para contar."
+    },
+    {
+        "title": "Problema 32: Rotar Lista a la Derecha",
+        "description": "<p>Escribe una función <code>solve(nums, k)</code> que rote la lista <code>nums</code> a la derecha por <code>k</code> pasos. La rotación debe ser in-place si es posible.</p><p>Ejemplo: <code>solve([1, 2, 3, 4, 5], 2)</code> devuelve <code>[4, 5, 1, 2, 3]</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums, k):\n    # Escribe tu código aquí\n    # nums debe ser modificado directamente o se debe devolver la lista rotada.\n    return nums\n",
+        "testCode": "results = []\ntests = [([1, 2, 3, 4, 5], 2, [4, 5, 1, 2, 3]), ([1], 3, [1]), ([1, 2], 0, [1, 2]), ([1, 2], 1, [2, 1])]\nfor i, (nums, k, expected) in enumerate(tests):\n    try:\n        result = solve(list(nums), k)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja `k` grandes con `k = k % len(nums)`. La rotación se puede hacer con *slicing*: `nums[:] = nums[-k:] + nums[:-k]`."
+    },
+    {
+        "title": "Problema 33: Convertir Romano a Entero (Básico)",
+        "description": "<p>Escribe una función <code>solve(s)</code> que convierta un número romano dado por el string <code>s</code> a un entero.</p><p>Asume que solo se usan I (1), V (5), X (10) y L (50). No te preocupes por restas (como IV).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    valores = {'I': 1, 'V': 5, 'X': 10, 'L': 50}\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"III\", 3), (\"LXV\", 65), (\"XX\", 2), (\"V\", 5), (\"LIII\", 53)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Inicializa `total = 0`. Itera sobre cada carácter `c` en la cadena `s`. Añade `valores[c]` al `total`."
+    },
+    {
+        "title": "Problema 34: Buscar Subcadena",
+        "description": "<p>Escribe una función <code>solve(texto, patron)</code> que devuelva el índice de la primera ocurrencia de la subcadena <code>patron</code> dentro de <code>texto</code>. Devuelve <code>-1</code> si no se encuentra.</p><p>No uses los métodos <code>in</code>, <code>find</code> o <code>index</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(texto, patron):\n    # Escribe tu código aquí\n    return -1\n",
+        "testCode": "results = []\ntests = [(\"abracadabra\", \"cad\", 4), (\"hola mundo\", \"mundo\", 5), (\"abc\", \"d\", -1), (\"a\", \"a\", 0), (\"\", \"\", 0)]\nfor i, (t, p, expected) in enumerate(tests):\n    try:\n        result = solve(t, p)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera `i` desde 0 hasta `len(texto) - len(patron)`. En cada `i`, comprueba si `texto[i:i+len(patron)]` es igual a `patron`."
+    },
+    {
+        "title": "Problema 35: Comprobar Paréntesis Balanceados (Simple)",
+        "description": "<p>Escribe una función <code>solve(s)</code> que devuelva <code>True</code> si una cadena <code>s</code> de paréntesis <code>()</code> está balanceada, y <code>False</code> si no. Ignora otros caracteres.</p><p>Ejemplo: <code>\"(())()\"</code> es <code>True</code>, <code>\"()(\"</code> es <code>False</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"()()\", True), (\"(())\", True), (\"((())\", False), (\")(\", False), (\"\", True), (\"a(b)c\", True)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un contador. Itera sobre `s`. Si `c == '('`, incrementa el contador. Si `c == ')'`, decréméntalo. Si el contador se vuelve negativo, devuelve `False`. Al final, el contador debe ser 0."
+    },
+    {
+        "title": "Problema 36: Número Perfecto",
+        "description": "<p>Escribe una función <code>solve(n)</code> que determine si un número entero positivo <code>n</code> es un <strong>número perfecto</strong> (la suma de sus divisores propios positivos es igual al número).</p><p>Ejemplo: 6 es perfecto, ya que $1 + 2 + 3 = 6$.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(6, True), (28, True), (10, False), (1, False), (496, True)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja `n <= 1` (es `False`). Itera `i` desde 1 hasta `n // 2`. Si `n % i == 0`, suma `i` a un total. Finalmente, comprueba si `total == n`."
+    },
+    {
+        "title": "Problema 37: Encontrar el Segundo Mayor",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que encuentre el segundo número más grande en una lista <code>nums</code> de al menos dos elementos.</p><p>Asume que no hay duplicados en los tests.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return None\n",
+        "testCode": "results = []\ntests = [([1, 5, 2, 8, 3], 5), ([10, 5, 20], 10), ([-1, -5, -2], -2)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Inicializa `max1 = -inf` y `max2 = -inf`. Itera sobre `num` en `nums`. Si `num > max1`, actualiza `max2 = max1` y `max1 = num`. Si no, si `num > max2`, actualiza `max2 = num`."
+    },
+    {
+        "title": "Problema 38: Intersección de Dos Listas",
+        "description": "<p>Escribe una función <code>solve(list1, list2)</code> que devuelva una lista con los elementos que son comunes a ambas listas. Los elementos en el resultado no deben estar duplicados (aunque lo estén en la entrada).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(list1, list2):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 2, 2, 3], [2, 3, 4], [2, 3]), ([10, 20], [30, 40], []), ([], [1], [])]\nfor i, (l1, l2, expected) in enumerate(tests):\n    try:\n        result = solve(l1, l2)\n        # Normalizar para que el orden no importe en la comparación\n        result.sort()\n        expected.sort()\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "La forma más fácil es usar `set`. Convierte ambas listas a `set` y encuentra la intersección con `set1 & set2`. Finalmente, convierte el resultado de nuevo a `list`."
+    },
+    {
+        "title": "Problema 39: Capitalizar Títulos",
+        "description": "<p>Escribe una función <code>solve(s)</code> que capitalice la primera letra de cada palabra en una cadena <code>s</code> (formato título).</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"hola mundo\", \"Hola Mundo\"), (\"the quick brown fox\", \"The Quick Brown Fox\"), (\"un-titulo-con-guiones\", \"Un-Titulo-Con-Guiones\"), ( \"a\", \"A\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa `s.split(' ')` para separar en palabras. Itera sobre la lista de palabras, capitaliza cada una (`palabra.capitalize()`) y únelas de nuevo con `join(' ')`."
+    },
+    {
+        "title": "Problema 40: Potencia N-ésima",
+        "description": "<p>Escribe una función <code>solve(base, exponente)</code> que calcule <code>base</code> elevado a la <code>exponente</code>. Asume que ambos son enteros positivos.</p><p>No uses el operador <code>**</code> ni la función <code>pow()</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(base, exponente):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(2, 3, 8), (5, 0, 1), (10, 4, 10000), (1, 100, 1)]\nfor i, (b, e, expected) in enumerate(tests):\n    try:\n        result = solve(b, e)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja el caso `exponente == 0` (devuelve 1). Inicializa `resultado = 1`. Usa un bucle `for _ in range(exponente):` y multiplica `resultado = resultado * base` en cada iteración."
+    },
+    {
+        "title": "Problema 41: Búsqueda Binaria",
+        "description": "<p>Escribe una función <code>solve(nums, target)</code> que implemente el algoritmo de <strong>Búsqueda Binaria</strong> para encontrar el índice del <code>target</code> en la lista **ordenada** <code>nums</code>.</p><p>Devuelve <code>-1</code> si el objetivo no se encuentra.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums, target):\n    # Escribe tu código aquí\n    return -1\n",
+        "testCode": "results = []\ntests = [([1, 5, 8, 12, 13], 8, 2), ([1, 5, 8, 12, 13], 15, -1), ([1], 1, 0), ([], 5, -1)]\nfor i, (nums, target, expected) in enumerate(tests):\n    try:\n        result = solve(nums, target)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Inicializa `izquierda = 0`, `derecha = len(nums) - 1`. Mientras `izquierda <= derecha`, calcula `medio = (izquierda + derecha) // 2`. Compara `nums[medio]` con `target` y ajusta `izquierda` o `derecha`."
+    },
+    {
+        "title": "Problema 42: Mover Ceros al Final",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que mueva todos los <code>0</code> al final de la lista <code>nums</code>, manteniendo el orden relativo de los elementos no nulos.</p><p>La operación debe ser in-place (modificar la lista directamente).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Modifica la lista nums in-place\n    # Escribe tu código aquí\n    return nums\n",
+        "testCode": "results = []\ntests = [([0, 1, 0, 3, 12], [1, 3, 12, 0, 0]), ([0, 0, 0], [0, 0, 0]), ([1, 2, 3], [1, 2, 3])]\nfor i, (nums, expected) in enumerate(tests):\n    try:\n        arr = list(nums)\n        result = solve(arr)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un puntero `pos_escritura = 0`. Itera sobre `nums`. Si `num != 0`, ponlo en `nums[pos_escritura] = num` e incrementa `pos_escritura`. Después del bucle, rellena el resto de la lista (desde `pos_escritura` hasta el final) con ceros."
+    },
+    {
+        "title": "Problema 43: Validar ISBN-10",
+        "description": "<p>Escribe una función <code>solve(isbn)</code> que devuelva <code>True</code> si un string es un ISBN-10 válido, y <code>False</code> si no.</p><p>La regla es que $ (x_1 \\cdot 10 + x_2 \\cdot 9 + ... + x_{10} \\cdot 1) \\pmod{11} = 0$. 'X' en la posición 10 cuenta como 10.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(isbn):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"048665080X\", True), (\"1112223339\", False), (\"877195869X\", True), (\"0000000000\", True)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera `i` de 0 a 9. El peso es `10 - i`. El dígito es `int(isbn[i])`, pero si `i == 9` y `isbn[i] == 'X'`, el valor es 10. Suma `valor * peso`. Al final, comprueba `suma % 11 == 0`."
+    },
+    {
+        "title": "Problema 44: Combinaciones de Suma (Dos Sumas)",
+        "description": "<p>Escribe una función <code>solve(nums, target)</code> que encuentre los índices de los dos números en la lista <code>nums</code> que sumen el <code>target</code>. Asume que siempre hay exactamente una solución.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums, target):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([2, 7, 11, 15], 9, [0, 1]), ([3, 2, 4], 6, [1, 2]), ([3, 3], 6, [0, 1])]\nfor i, (nums, target, expected) in enumerate(tests):\n    try:\n        result = solve(nums, target)\n        # Se espera que el orden no importe para la validación\n        result.sort()\n        expected.sort()\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un diccionario `vistos` para guardar `valor: indice`. Itera sobre `nums` con `enumerate(nums)`. Para cada `num` en el índice `i`, calcula `complemento = target - num`. Si `complemento` está en `vistos`, devuelve `[vistos[complemento], i]`."
+    },
+    {
+        "title": "Problema 45: Recursividad: Suma de Array",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que calcule la suma de todos los elementos en la lista <code>nums</code> utilizando **recursión**.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Caso base\n    if not nums:\n        return 0\n    # Caso recursivo\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([1, 2, 3, 4], 10), ([10], 10), ([], 0), ([-1, 5, 2], 6)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "El caso base ya está dado. El caso recursivo es la suma del primer elemento (`nums[0]`) más el resultado de llamar a `solve()` con el resto de la lista (`nums[1:]`)."
+    },
+    {
+        "title": "Problema 46: Fusionar Dos Listas Ordenadas",
+        "description": "<p>Escribe una función <code>solve(list1, list2)</code> que fusione dos listas ya ordenadas <code>list1</code> y <code>list2</code> en una sola lista también ordenada.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(list1, list2):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 3, 5], [2, 4, 6], [1, 2, 3, 4, 5, 6]), ([1, 2], [3, 4], [1, 2, 3, 4]), ([], [1, 2], [1, 2])]\nfor i, (l1, l2, expected) in enumerate(tests):\n    try:\n        result = solve(l1, l2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa dos punteros, `i` para `list1` y `j` para `list2`. Mientras `i` y `j` estén dentro de sus listas, añade el menor de `list1[i]` o `list2[j]` al resultado y avanza ese puntero. Al final, añade los elementos restantes de la otra lista."
+    },
+    {
+        "title": "Problema 47: Comprimir Cadena (Run-Length Encoding)",
+        "description": "<p>Escribe una función <code>solve(s)</code> que comprima una cadena utilizando la codificación de longitud de secuencia (Run-Length Encoding).</p><p>Ejemplo: <code>solve(\"aaabbc\")</code> debe devolver <code>\"a3b2c1\"</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"aaabbc\", \"a3b2c1\"), (\"wwwwaaadexxxxxx\", \"w4a3d1e1x6\"), (\"a\", \"a1\"), (\"\", \"\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera sobre la cadena. Mantén un `contador` y un `caracter_actual`. Si el nuevo carácter es diferente (o llegas al final), añade `caracter_actual` y `str(contador)` al resultado, y reinicia el contador."
+    },
+    {
+        "title": "Problema 48: Eliminar Duplicados Adyacentes (Solo lista)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que elimine los duplicados adyacentes de una lista <code>nums</code>. Solo si el elemento es adyacente al anterior y es idéntico, se considera un duplicado a eliminar.</p><p>Ejemplo: <code>solve([1, 2, 2, 3, 3, 3, 1])</code> debe devolver <code>[1, 2, 3, 1]</code> (eliminando un 2, dos 3s).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 2, 2, 3, 3, 3, 1], [1, 2, 3, 1]), ([5, 5, 5, 5], [5]), ([1, 2, 1, 2], [1, 2, 1, 2]), ([], [])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Crea una `lista_resultado`. Itera sobre `nums`. Añade `num` a `lista_resultado` solo si `lista_resultado` está vacía o `num != lista_resultado[-1]` (diferente al último elemento añadido)."
+    },
+    {
+        "title": "Problema 49: Ganancia Máxima en Acciones",
+        "description": "<p>Escribe una función <code>solve(prices)</code> que, dada una lista <code>prices</code> donde <code>prices[i]</code> es el precio de una acción el día <code>i</code>, calcule la ganancia máxima que se puede obtener comprando un día y vendiendo en un día posterior.</p><p>Si no se puede obtener ganancia, devuelve 0.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(prices):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([7, 1, 5, 3, 6, 4], 5), ([7, 6, 4, 3, 1], 0), ([1, 2], 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera sobre los precios. Mantén `precio_minimo_hasta_ahora = inf` y `max_ganancia = 0`. En cada paso, `precio_minimo_hasta_ahora = min(precio_minimo_hasta_ahora, precio_actual)`. Luego, `max_ganancia = max(max_ganancia, precio_actual - precio_minimo_hasta_ahora)`."
+    },
+    {
+        "title": "Problema 50: Máximo Subarray (Kadane's Simple)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que encuentre la suma de la sublista (subarray) contigua con la suma más grande en <code>nums</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([-2, 1, -3, 4, -1, 2, 1, -5, 4], 6), ([1], 1), ([-1], -1), ([5, 4, -1, 7, 8], 23)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Algoritmo de Kadane: Inicializa `suma_actual = 0` y `max_suma_global = nums[0]`. Itera sobre `num` en `nums`. `suma_actual = max(num, suma_actual + num)`. `max_suma_global = max(max_suma_global, suma_actual)`."
+    },
+    {
+        "title": "Problema 51: Primer Carácter Único",
+        "description": "<p>Escribe una función <code>solve(s)</code> que encuentre el índice del primer carácter que no se repite en la cadena <code>s</code>. Si no existe un carácter único, devuelve <code>-1</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return -1\n",
+        "testCode": "results = []\ntests = [(\"leetcode\", 0), (\"loveleetcode\", 2), (\"aabb\", -1), (\"a\", 0), (\"abacaba\", 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un diccionario (o `collections.Counter`) para contar la frecuencia de cada carácter en `s`. Luego, itera sobre `s` con `enumerate`. El primer carácter `c` cuyo `conteo[c] == 1` es la respuesta; devuelve su índice."
+    },
+    {
+        "title": "Problema 52: Rotación de Matriz (90 grados)",
+        "description": "<p>Escribe una función <code>solve(matrix)</code> que rote una matriz cuadrada $N \\times N$ 90 grados en sentido horario. Modifica la matriz **in-place**.</p><p>Ejemplo: <code>[[1, 2], [3, 4]]</code> -> <code>[[3, 1], [4, 2]]</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(matrix):\n    # Modifica la matriz in-place\n    # Escribe tu código aquí\n    return matrix\n",
+        "testCode": "results = []\ntests = [\n    ([[1, 2], [3, 4]], [[3, 1], [4, 2]]),\n    ([[1, 2, 3], [4, 5, 6], [7, 8, 9]], [[7, 4, 1], [8, 5, 2], [9, 6, 3]])\n]\nfor i, (mat, expected) in enumerate(tests):\n    try:\n        matrix = [row[:] for row in mat] # Copia profunda para in-place\n        result = solve(matrix)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Rotación in-place: 1. Transpone la matriz (intercambia `matrix[i][j]` con `matrix[j][i]`). 2. Invierte cada fila (ej. `matrix[i].reverse()`)."
+    },
+    {
+        "title": "Problema 53: Convertir Decimal a Binario",
+        "description": "<p>Escribe una función <code>solve(n)</code> que convierta un número entero positivo <code>n</code> a su representación binaria como una cadena de texto.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(2, \"10\"), (13, \"1101\"), (0, \"0\"), (1, \"1\"), (32, \"100000\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa la función `bin(n)` de Python. Esta te dará un string como `0b1101`. Necesitarás quitar el prefijo `0b` usando *slicing* `[2:]`."
+    },
+    {
+        "title": "Problema 54: Calcular Raíz Cuadrada Entera",
+        "description": "<p>Escribe una función <code>solve(x)</code> que calcule y devuelva la raíz cuadrada entera de un número entero no negativo <code>x</code>. La parte decimal debe ser truncada.</p><p>Ejemplo: $ \\sqrt{8} = 2.828... \\rightarrow 2$.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(x):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(4, 2), (8, 2), (16, 4), (0, 0), (1, 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Puedes usar búsqueda binaria (en el rango de 0 a $x$) para encontrar el número `r` tal que $r \cdot r \le x$ y $(r+1) \cdot (r+1) > x$. O, más simple, calcula `int(x**0.5)`."
+    },
+    {
+        "title": "Problema 55: Validar Fecha (DD/MM/AAAA)",
+        "description": "<p>Escribe una función <code>solve(date_str)</code> que verifique si un string representa una fecha válida en formato <code>DD/MM/AAAA</code>. Ten en cuenta días en meses (28, 29, 30, 31) y años bisiestos (simplemente asume que 2000, 2004, 2008, etc. son bisiestos).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(date_str):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"31/12/2023\", True), (\"29/02/2000\", True), (\"30/02/2023\", False), (\"15/01/2023\", True), (\"01/13/2023\", False)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Intenta usar `datetime.strptime(date_str, '%d/%m/%Y')` dentro de un bloque `try...except`. Si no lanza una excepción, la fecha es válida."
+    },
+    {
+        "title": "Problema 56: Búsqueda de Inserción",
+        "description": "<p>Escribe una función <code>solve(nums, target)</code> que devuelva el índice donde se debería insertar el <code>target</code> en la lista ordenada <code>nums</code> para mantener el orden. Si el target ya existe, devuelve su índice.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums, target):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([1, 3, 5, 6], 5, 2), ([1, 3, 5, 6], 2, 1), ([1, 3, 5, 6], 7, 4), ([1, 3, 5, 6], 0, 0)]\nfor i, (nums, target, expected) in enumerate(tests):\n    try:\n        result = solve(nums, target)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa búsqueda binaria. Si `target` es encontrado, devuelve `medio`. Si el bucle termina, el puntero `izquierda` indicará la posición correcta de inserción."
+    },
+    {
+        "title": "Problema 57: Número de Islas (Contar Componentes Conectados en Matriz 2D Simple)",
+        "description": "<p>Escribe una función <code>solve(grid)</code> que cuente el número de **islas** en una cuadrícula binaria 2D <code>grid</code>.</p><p>Una 'isla' es un '1' rodeado de '0's, y se forma conectando horizontal o verticalmente '1's. Modifica la cuadrícula in-place para marcar las islas visitadas (cambia '1' a '0').</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(grid):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [\n    ([\n        [\"1\", \"1\", \"1\", \"1\", \"0\"],\n        [\"1\", \"1\", \"0\", \"1\", \"0\"],\n        [\"1\", \"1\", \"0\", \"0\", \"0\"],\n        [\"0\", \"0\", \"0\", \"0\", \"0\"]\n    ], 1),\n    ([\n        [\"1\", \"1\", \"0\", \"0\", \"0\"],\n        [\"1\", \"1\", \"0\", \"0\", \"0\"],\n        [\"0\", \"0\", \"1\", \"0\", \"0\"],\n        [\"0\", \"0\", \"0\", \"1\", \"1\"]\n    ], 3)\n]\nfor i, (g, expected) in enumerate(tests):\n    try:\n        grid = [list(row) for row in g] # Copia profunda para in-place\n        result = solve(grid)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera sobre `grid[i][j]`. Si encuentras un '1', incrementa `contador_islas` y llama a una función DFS (búsqueda en profundidad) que visite recursivamente todos los '1' adyacentes (arriba, abajo, izq, der) y los cambie a '0' (o a '#') para marcarlos como visitados."
+    },
+    {
+        "title": "Problema 58: Generar Subconjuntos (Recursión)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que devuelva todos los subconjuntos (el conjunto potencia) de una lista de números únicos <code>nums</code>.</p><p>El orden de los subconjuntos o de los elementos dentro de ellos no importa (para el test, se ordenan automáticamente).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\n# Helper para comparar listas de listas sin importar el orden\ndef compare_subsets(result, expected):\n    result = [tuple(sorted(s)) for s in result]\n    expected = [tuple(sorted(s)) for s in expected]\n    return sorted(result) == sorted(expected)\n\ntests = [\n    ([1, 2, 3], [[], [1], [2], [3], [1, 2], [1, 3], [2, 3], [1, 2, 3]]),\n    ([0], [[], [0]]),\n    ([], [[]])\n]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if compare_subsets(result, expected):\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa backtracking (recursión). Define una función `dfs(indice, subset_actual)`. En cada paso, tienes dos opciones: 1) incluir `nums[indice]` en el `subset_actual` y llamar a `dfs(indice+1, ...)`, o 2) no incluirlo y llamar a `dfs(indice+1, ...)`."
+    },
+    {
+        "title": "Problema 59: Distancia de Hamming",
+        "description": "<p>Escribe una función <code>solve(x, y)</code> que calcule la <strong>Distancia de Hamming</strong> entre dos enteros <code>x</code> e <code>y</code>.</p><p>La distancia de Hamming es el número de posiciones en las que los bits correspondientes son diferentes en sus representaciones binarias.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(x, y):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(1, 4, 2), (2, 5, 3), (1, 1, 0), (0, 10, 2)]\nfor i, (x, y, expected) in enumerate(tests):\n    try:\n        result = solve(x, y)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Calcula `x XOR y` (usando el operador `^`). El resultado tendrá un '1' en cada bit donde `x` e `y` diferían. Luego, cuenta el número de '1's en ese resultado (puedes usar `bin(resultado).count('1')`)."
+    },
+    {
+        "title": "Problema 60: Cifrado César",
+        "description": "<p>Escribe una función <code>solve(s, k)</code> que implemente el Cifrado César para la cadena <code>s</code> con un desplazamiento <code>k</code>.</p><p>Maneja solo letras mayúsculas y minúsculas (sin cambiar los no-alfabéticos) y asegura que <code>k</code> es positivo.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s, k):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"ABC\", 1, \"BCD\"), (\"xyz\", 3, \"abc\"), (\"Hola Mundo! 123\", 1, \"Ipmb Nvoep! 123\")]\nfor i, (s, k, expected) in enumerate(tests):\n    try:\n        result = solve(s, k)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera sobre `s`. Si el carácter es una letra, obtén su valor ASCII (`ord()`). Suma `k`. Si se pasa de 'z' (o 'Z'), réstale 26. Convierte de nuevo a `chr()`."
+    },
+    {
+        "title": "Problema 61: Caminos Únicos en Cuadrícula (DP Simple)",
+        "description": "<p>Escribe una función <code>solve(m, n)</code> que calcule el número de caminos únicos desde la esquina superior izquierda a la esquina inferior derecha en una cuadrícula de $m \\times n$.</p><p>Solo se permiten movimientos hacia abajo o hacia la derecha.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(m, n):\n    # Escribe tu código aquí (Programación Dinámica o Combinatoria)\n    return 0\n",
+        "testCode": "results = []\ntests = [(3, 7, 28), (3, 2, 3), (1, 1, 1), (2, 2, 2)]\nfor i, (m, n, expected) in enumerate(tests):\n    try:\n        result = solve(m, n)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa Programación Dinámica. Crea una cuadrícula `dp` de $m \times n$. Inicializa `dp[0][j] = 1` y `dp[i][0] = 1`. Luego, `dp[i][j] = dp[i-1][j] + dp[i][j-1]`."
+    },
+    {
+        "title": "Problema 62: Subcadena más Larga sin Repetir Caracteres",
+        "description": "<p>Escribe una función <code>solve(s)</code> que encuentre la longitud de la subcadena más larga de <code>s</code> que no contenga caracteres repetidos.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"abcabcbb\", 3), (\"bbbbb\", 1), (\"pwwkew\", 3), (\"\", 0), (\"dvdf\", 3)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa el patrón de ventana deslizante. Mantén un `set` de caracteres `vistos_en_ventana`. Expande la ventana (puntero `derecha`). Si `s[derecha]` ya está en el `set`, encoge la ventana (puntero `izquierda`) hasta que puedas quitarlo."
+    },
+    {
+        "title": "Problema 63: Implementar Pila (Stack) con Lista",
+        "description": "<p>Implementa una clase simple <code>Stack</code> con los métodos <code>push(val)</code> (añadir), <code>pop()</code> (quitar y devolver el último), y <code>peek()</code> (ver el último sin quitarlo).</p><p>Si <code>pop()</code> o <code>peek()</code> se llaman en una pila vacía, deben devolver <code>None</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "class Stack:\n    def __init__(self):\n        # Inicializa la estructura de datos para la pila\n        self.items = []\n\n    def push(self, val):\n        # Escribe tu código aquí\n        pass\n\n    def pop(self):\n        # Escribe tu código aquí\n        return None\n\n    def peek(self, key):\n        # Escribe tu código aquí\n        return None\n\ndef solve():\n    # Usa el código de prueba para verificar la implementación de la clase Stack\n    return Stack()\n",
+        "testCode": "results = []\ntry:\n    s = Stack()\n    s.push(1)\n    s.push(2)\n    results.append(f\"Test 1 (push 1, 2): <span class='text-green-400'>PASSED</span>\")\n    if s.peek() == 2: results.append(f\"Test 2 (peek): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 2 FAILED: Se esperaba 2, se obtuvo {s.peek()}\")\n    if s.pop() == 2: results.append(f\"Test 3 (pop 2): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 3 FAILED: Se esperaba 2, se obtuvo {s.pop()}\")\n    if s.pop() == 1: results.append(f\"Test 4 (pop 1): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 4 FAILED: Se esperaba 1, se obtuvo {s.pop()}\")\n    if s.pop() is None and s.peek() is None: results.append(f\"Test 5 (empty pop/peek): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(\"Test 5 FAILED: Empty operations failed\")\nexcept Exception as e:\n    results.append(f\"Clase Stack: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "`push(val)` es `self.items.append(val)`. `pop()` es `self.items.pop()` (comprueba si está vacía). `peek()` es `self.items[-1]` (comprueba si está vacía)."
+    },
+    {
+        "title": "Problema 64: Implementar Cola (Queue) con Lista",
+        "description": "<p>Implementa una clase simple <code>Queue</code> con los métodos <code>enqueue(val)</code> (añadir al final), <code>dequeue()</code> (quitar y devolver el primero), y <code>peek()</code> (ver el primero sin quitarlo).</p><p>Si <code>dequeue()</code> o <code>peek()</code> se llaman en una cola vacía, deben devolver <code>None</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "class Queue:\n    def __init__(self):\n        # Inicializa la estructura de datos para la cola\n        self.items = []\n\n    def enqueue(self, val):\n        # Escribe tu código aquí\n        pass\n\n    def dequeue(self):\n        # Escribe tu código aquí\n        return None\n\n    def peek(self):\n        # Escribe tu código aquí\n        return None\n\ndef solve():\n    # Usa el código de prueba para verificar la implementación de la clase Queue\n    return Queue()\n",
+        "testCode": "results = []\ntry:\n    q = Queue()\n    q.enqueue(1)\n    q.enqueue(2)\n    results.append(f\"Test 1 (enqueue 1, 2): <span class='text-green-400'>PASSED</span>\")\n    if q.peek() == 1: results.append(f\"Test 2 (peek): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 2 FAILED: Se esperaba 1, se obtuvo {q.peek()}\")\n    if q.dequeue() == 1: results.append(f\"Test 3 (dequeue 1): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 3 FAILED: Se esperaba 1, se obtuvo {q.dequeue()}\")\n    if q.dequeue() == 2: results.append(f\"Test 4 (dequeue 2): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 4 FAILED: Se esperaba 2, se obtuvo {q.dequeue()}\")\n    if q.dequeue() is None and q.peek() is None: results.append(f\"Test 5 (empty dequeue/peek): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(\"Test 5 FAILED: Empty operations failed\")\nexcept Exception as e:\n    results.append(f\"Clase Queue: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "`enqueue(val)` es `self.items.append(val)`. `dequeue()` es `self.items.pop(0)` (comprueba si está vacía). `peek()` es `self.items[0]` (comprueba si está vacía). (Usar `deque` es más eficiente)."
+    },
+    {
+        "title": "Problema 65: Búsqueda en Profundidad (DFS) Simple",
+        "description": "<p>Escribe una función <code>solve(graph, start)</code> que devuelva una lista de nodos visitados en orden utilizando <strong>Búsqueda en Profundidad (DFS)</strong>, comenzando desde el nodo <code>start</code>.</p><p>El grafo se representa como un diccionario de listas de adyacencia: <code>{'A': ['B', 'C'], ...}</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(graph, start):\n    # Escribe tu código aquí (Usa una Pila o Recursión)\n    return []\n",
+        "testCode": "results = []\ngraph = {'A': ['B', 'C'], 'B': ['D', 'E'], 'C': ['F'], 'D': [], 'E': ['F'], 'F': []}\ntests = [('A', ['A', 'C', 'F', 'B', 'E', 'D'])]\nfor i, (start, expected) in enumerate(tests):\n    try:\n        result = solve(graph, start)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un `set` de `visitados` y una `pila`. Añade `start` a la pila. Mientras la pila no esté vacía, saca (pop) `nodo`. Si `nodo` no está en `visitados`, añádelo a `visitados` y a la `lista_resultado`. Luego, añade sus vecinos (en orden inverso) a la pila."
+    },
+    {
+        "title": "Problema 66: Búsqueda en Amplitud (BFS) Simple",
+        "description": "<p>Escribe una función <code>solve(graph, start)</code> que devuelva una lista de nodos visitados en orden utilizando <strong>Búsqueda en Amplitud (BFS)</strong>, comenzando desde el nodo <code>start</code>.</p><p>El grafo se representa como un diccionario de listas de adyacencia: <code>{'A': ['B', 'C'], ...}</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "from collections import deque\n\ndef solve(graph, start):\n    # Escribe tu código aquí (Usa una Cola (Queue))\n    return []\n",
+        "testCode": "results = []\ngraph = {'A': ['B', 'C'], 'B': ['D', 'E'], 'C': ['F'], 'D': [], 'E': ['F'], 'F': []}\ntests = [('A', ['A', 'B', 'C', 'D', 'E', 'F'])]\nfor i, (start, expected) in enumerate(tests):\n    try:\n        result = solve(graph, start)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un `set` de `visitados` y una `cola` (usa `deque`). Añade `start` a la cola y a `visitados`. Mientras la cola no esté vacía, saca por la izquierda (popleft) `nodo`. Añádelo a `lista_resultado`. Luego, añade sus vecinos (que no estén en `visitados`) a la cola y a `visitados`."
+    },
+    {
+        "title": "Problema 67: Validar Árbol de Búsqueda Binaria (Array Representación)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que verifique si una lista de números <code>nums</code>, interpretada como un Árbol de Búsqueda Binaria (BST) **completo**, es válida. Un BST es válido si para cada nodo, todos los nodos a su izquierda son menores y todos a su derecha son mayores.</p><p>Usa <code>None</code> para nodos vacíos en el array. La representación en array es nivel por nivel.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [([2, 1, 3], True), ([5, 1, 4, None, None, 3, 6], False), ([1, 2, 3], False), ([3, 1, 5, 0, 2, 4, 6], True)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Crea una función recursiva `validar(idx, min_val, max_val)`. El nodo `idx` debe ser $> min\_val$ y $< max\_val$. Llama recursivamente para la izquierda (`2*idx + 1`) con `(min_val, nodo_actual)` y derecha (`2*idx + 2`) con `(nodo_actual, max_val)`."
+    },
+    {
+        "title": "Problema 68: Merge Sort (Algoritmo de Ordenamiento)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que implemente el algoritmo de ordenamiento <strong>Merge Sort</strong> para ordenar la lista <code>nums</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Implementa Merge Sort)\n    return nums\n",
+        "testCode": "results = []\ntests = [([5, 2, 8, 1, 9], [1, 2, 5, 8, 9]), ([1, 1, 1], [1, 1, 1]), ([], []), ([10, -5, 2], [-5, 2, 10])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(list(arg))\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Divide y vencerás. Divide la lista por la mitad recursivamente hasta tener listas de 1 elemento. Luego, implementa una función `merge` (fusionar) que combine dos listas ordenadas (ver problema 46)."
+    },
+    {
+        "title": "Problema 69: Quick Sort (Algoritmo de Ordenamiento)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que implemente el algoritmo de ordenamiento <strong>Quick Sort</strong> para ordenar la lista <code>nums</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Implementa Quick Sort)\n    return nums\n",
+        "testCode": "results = []\ntests = [([5, 2, 8, 1, 9], [1, 2, 5, 8, 9]), ([1, 1, 1], [1, 1, 1]), ([], []), ([10, -5, 2], [-5, 2, 10])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(list(arg))\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Caso base: `len(nums) <= 1`. Si no, elige un `pivote` (ej. `nums[0]`). Crea listas de `menores` y `mayores`. Devuelve `solve(menores) + [pivote] + solve(mayores)`."
+    },
+    {
+        "title": "Problema 70: Paréntesis Válidos (Stack)",
+        "description": "<p>Escribe una función <code>solve(s)</code> que determine si la cadena <code>s</code>, que contiene solo los caracteres '(', ')', '{', '}', '[' y ']', es válida. Los corchetes deben cerrarse en el orden correcto.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [(\"()[]{}\", True), (\"([{}])\", True), (\"(]\", False), (\"(((\", False), (\"{[]}\", True)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa una `pila` (stack) y un `dict` de mapeo (ej. `mapa = {')': '(', '}': '{', ']': '['}`). Si `c` es de apertura, `push`. Si es de cierre, `pop` y comprueba si coincide con `mapa[c]`."
+    },
+    {
+        "title": "Problema 71: Generar Permutaciones (Recursión)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que devuelva todas las posibles **permutaciones** de una lista de números únicos <code>nums</code>.</p><p>El orden de las permutaciones no importa (para el test, se ordenan automáticamente).</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Usa Backtracking/Recursión)\n    return []\n",
+        "testCode": "results = []\n# Helper para comparar listas de listas sin importar el orden\ndef compare_permutations(result, expected):\n    result = [tuple(s) for s in result]\n    expected = [tuple(s) for s in expected]\n    return sorted(result) == sorted(expected)\n\ntests = [\n    ([1, 2, 3], [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]),\n    ([0, 1], [[0, 1], [1, 0]]),\n    ([], [[]])\n]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if compare_permutations(result, expected):\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa backtracking. Define una función `dfs(permutacion_actual, numeros_restantes)`. Itera sobre `numeros_restantes`, y para cada `num`, llámate recursivamente con `dfs(permutacion_actual + [num], numeros_restantes_sin_num)`."
+    },
+    {
+        "title": "Problema 72: Suma de Dos Números en Listas (Inverso)",
+        "description": "<p>Escribe una función <code>solve(l1, l2)</code> que tome dos listas, <code>l1</code> y <code>l2</code>, que representan dos números enteros. Los dígitos se almacenan en orden **inverso**.</p><p>Devuelve una nueva lista representando la suma de los dos números (también en orden inverso).</p><p>Ejemplo: <code>[2, 4, 3]</code> (342) + <code>[5, 6, 4]</code> (465) = 807, debe devolver <code>[7, 0, 8]</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(l1, l2):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [([2, 4, 3], [5, 6, 4], [7, 0, 8]), ([0], [0], [0]), ([9, 9, 9], [1], [0, 0, 0, 1])]\nfor i, (l1, l2, expected) in enumerate(tests):\n    try:\n        result = solve(l1, l2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Itera mientras `l1`, `l2` o `acarreo` (carry) existan. Saca (pop) de `l1` y `l2` (o usa 0 si están vacías). Calcula `suma = d1 + d2 + acarreo`. El nuevo dígito es `suma % 10` y el `acarreo` es `suma // 10`."
+    },
+    {
+        "title": "Problema 73: Insertar y Fusionar Intervalos",
+        "description": "<p>Escribe una función <code>solve(intervals, new_interval)</code> que tome una lista de intervalos no superpuestos, y un nuevo intervalo.</p><p>Inserta el nuevo intervalo en el lugar correcto y fusiona cualquier intervalo superpuesto.</p><p><code>intervals</code> y <code>new_interval</code> son listas de listas: <code>[[start, end], ...]</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(intervals, new_interval):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\ntests = [\n    ([[1, 3], [6, 9]], [2, 5], [[1, 5], [6, 9]]),\n    ([[1, 2], [3, 5], [6, 7], [8, 10], [12, 16]], [4, 8], [[1, 2], [3, 10], [12, 16]]),\n    ([], [5, 7], [[5, 7]])\n]\nfor i, (inter, new_inter, expected) in enumerate(tests):\n    try:\n        result = solve(inter, new_inter)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Crea una lista `resultado`. Itera sobre `intervals`. Añade todos los intervalos que terminan *antes* de que `new_interval` comience. Luego, fusiona `new_interval` con todos los intervalos que se superponen (actualizando `new_interval.start` y `new_interval.end`). Añade el `new_interval` fusionado. Finalmente, añade los intervalos restantes."
+    },
+    {
+        "title": "Problema 74: Monedas (Dynamic Programming)",
+        "description": "<p>Escribe una función <code>solve(coins, amount)</code> para calcular el **mínimo número de monedas** necesarias para sumar la <code>amount</code> dada.</p><p>Si esa cantidad no se puede lograr con las monedas dadas, devuelve <code>-1</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(coins, amount):\n    # Escribe tu código aquí (Programación Dinámica)\n    return -1\n",
+        "testCode": "results = []\ntests = [([1, 2, 5], 11, 3), ([2], 3, -1), ([1], 0, 0), ([1, 3, 4, 5], 7, 2)]\nfor i, (c, a, expected) in enumerate(tests):\n    try:\n        result = solve(c, a)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa DP. Crea `dp = [inf] * (amount + 1)`, con `dp[0] = 0`. Itera `i` de 1 a `amount`. Para cada `coin` en `coins`, `dp[i] = min(dp[i], 1 + dp[i - coin])` (si `i >= coin`)."
+    },
+    {
+        "title": "Problema 75: Caminos con Obstáculos (DP)",
+        "description": "<p>Escribe una función <code>solve(obstacleGrid)</code> para calcular el número de caminos únicos desde la esquina superior izquierda a la inferior derecha de una cuadrícula con obstáculos.</p><p>Los obstáculos se marcan con <code>1</code> y los espacios vacíos con <code>0</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(obstacleGrid):\n    # Escribe tu código aquí (Programación Dinámica)\n    return 0\n",
+        "testCode": "results = []\ntests = [\n    ([[0, 0, 0], [0, 1, 0], [0, 0, 0]], 2),\n    ([[0, 1], [0, 0]], 1),\n    ([[1]], 0),\n    ([[0, 0, 0], [0, 0, 0]], 3)\n]\nfor i, (g, expected) in enumerate(tests):\n    try:\n        result = solve(g)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Similar al Problema 61. Usa DP. Si `obstacleGrid[i][j] == 1`, entonces `dp[i][j] = 0`. Si no, `dp[i][j] = dp[i-1][j] + dp[i][j-1]`."
+    },
+    {
+        "title": "Problema 76: Encontrar el Punto Fijo",
+        "description": "<p>Escribe una función <code>solve(A)</code> que, dado un array **ordenado** <code>A</code> de enteros distintos, devuelva el índice <code>i</code> tal que <code>A[i] = i</code> (un punto fijo). Si hay múltiples, devuelve el más pequeño. Si no existe, devuelve <code>-1</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(A):\n    # Escribe tu código aquí (Búsqueda Modificada)\n    return -1\n",
+        "testCode": "results = []\ntests = [([-10, -5, 0, 3, 7], 3), ([0, 2, 5, 8, 17], 0), ([1, 2, 3, 4, 5], -1), ([3, 4, 5], -1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa búsqueda binaria. Compara `A[medio]` con `medio`. Si `A[medio] < medio`, busca a la derecha (`izquierda = medio + 1`). Si no, busca a la izquierda (`derecha = medio - 1`). Guarda el `resultado` si `A[medio] == medio`."
+    },
+    {
+        "title": "Problema 77: Invertir Palabras en una Cadena",
+        "description": "<p>Escribe una función <code>solve(s)</code> que invierta el orden de las palabras en una cadena <code>s</code>. Los espacios múltiples deben reducirse a un solo espacio, y se deben eliminar los espacios iniciales y finales.</p><p>Ejemplo: <code>\"el cielo es azul\"</code> -> <code>\"azul es cielo el\"</code>.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"el cielo es azul\", \"azul es cielo el\"), (\"  hello world  \", \"world hello\"), (\"a single word\", \"word single\"), (\"   \", \"\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa `s.split()` (sin argumentos, maneja espacios múltiples). Luego, invierte la lista resultante (`[::-1]`). Finalmente, únelas con `join(' ')`."
+    },
+    {
+        "title": "Problema 78: Reemplazar Espacios",
+        "description": "<p>Escribe una función <code>solve(s)</code> que reemplace todos los espacios en la cadena <code>s</code> con la secuencia de caracteres <code>%20</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"Mr John Smith\", \"Mr%20John%20Smith\"), (\"   \", \"%20%20%20\"), (\"hola\", \"hola\")]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Puedes usar el método `replace()` de las cadenas: `s.replace(' ', '%20')`."
+    },
+    {
+        "title": "Problema 79: Encontrar el Elemento Faltante",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que, dada una lista <code>nums</code> de $N$ números **distintos** tomados de $1$ a $N+1$, encuentre el número que falta. Utiliza un enfoque eficiente (sin sumar todos los números).</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Pista: XOR o Propiedades de Suma)\n    return 0\n",
+        "testCode": "results = []\ntests = [([3, 0, 1], 2), ([9, 6, 4, 2, 3, 5, 7, 0, 1], 8), ([1], 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "La lista tiene $N$ números (índices 0 a $N-1$) y el rango es $0$ a $N$. La suma esperada es $N \cdot (N+1) / 2$, donde $N = \text{len}(nums)$. Compara la suma esperada con `sum(nums)`."
+    },
+    {
+        "title": "Problema 80: Encontrar el Número Único (Single Number - XOR)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que encuentre el único elemento que aparece una vez en la lista <code>nums</code>, donde todos los demás elementos aparecen exactamente dos veces.</p><p>Usa una solución con complejidad de tiempo lineal y sin memoria extra.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Pista: XOR)\n    return 0\n",
+        "testCode": "results = []\ntests = [([2, 2, 1], 1), ([4, 1, 2, 1, 2], 4), ([1], 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa el operador XOR (`^`). $A \oplus A = 0$ y $A \oplus 0 = A$. Inicializa `resultado = 0`. Itera sobre `nums` y haz `resultado = resultado ^ num`. El `resultado` final será el número único."
+    },
+    {
+        "title": "Problema 81: Longest Common Subsequence (LCS - DP)",
+        "description": "<p>Escribe una función <code>solve(text1, text2)</code> que devuelva la **longitud** de la subcadena común más larga (LCS) entre <code>text1</code> y <code>text2</code>.</p><p>Una subcadena no necesita ser contigua.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(text1, text2):\n    # Escribe tu código aquí (Programación Dinámica)\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"abcde\", \"ace\", 3), (\"abc\", \"abc\", 3), (\"abc\", \"def\", 0), (\"a\", \"b\", 0), (\"AGGTAB\", \"GXTXAYB\", 4)]\nfor i, (t1, t2, expected) in enumerate(tests):\n    try:\n        result = solve(t1, t2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa DP. Crea una cuadrícula `dp[M+1][N+1]`. Si `text1[i] == text2[j]`, entonces `dp[i][j] = 1 + dp[i-1][j-1]`. Si no, `dp[i][j] = max(dp[i-1][j], dp[i][j-1])`."
+    },
+    {
+        "title": "Problema 82: Distancia de Levenshtein (String Edits - DP)",
+        "description": "<p>Escribe una función <code>solve(word1, word2)</code> que calcule el número mínimo de operaciones (inserción, borrado, reemplazo) necesarias para convertir <code>word1</code> en <code>word2</code>. Esto se conoce como <strong>Distancia de Levenshtein</strong>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(word1, word2):\n    # Escribe tu código aquí (Programación Dinámica)\n    return 0\n",
+        "testCode": "results = []\ntests = [(\"horse\", \"ros\", 3), (\"intention\", \"execution\", 5), (\"\", \"a\", 1), (\"a\", \"\", 1), (\"a\", \"b\", 1)]\nfor i, (w1, w2, expected) in enumerate(tests):\n    try:\n        result = solve(w1, w2)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa DP. `dp[i][j]` = distancia. Si `w1[i] == w2[j]`, `dp[i][j] = dp[i-1][j-1]`. Si no, `dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])`."
+    },
+    {
+        "title": "Problema 83: Encontrar el Pico de Montaña (Array)",
+        "description": "<p>Escribe una función <code>solve(A)</code> que devuelva el índice del elemento **pico** en un array <code>A</code> que es una *montaña* (creciente, y luego decreciente).</p><p>Asume que siempre existe un pico y que el array tiene al menos 3 elementos.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(A):\n    # Escribe tu código aquí (Puedes usar Búsqueda Binaria)\n    return 0\n",
+        "testCode": "results = []\ntests = [([0, 1, 0], 1), ([0, 2, 1, 0], 1), ([0, 10, 5, 2], 1)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa búsqueda binaria. Si `A[medio] < A[medio+1]`, el pico está a la derecha (estás subiendo). Si `A[medio] > A[medio+1]`, el pico está a la izquierda (o es `medio`, estás bajando)."
+    },
+    {
+        "title": "Problema 84: Encontrar el K-ésimo Número Más Grande (Quickselect Simple)",
+        "description": "<p>Escribe una función <code>solve(nums, k)</code> que encuentre el $k$-ésimo número más grande en la lista **desordenada** <code>nums</code>. $k=1$ es el más grande.</p><p>No se permite usar <code>sort()</code>.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums, k):\n    # Escribe tu código aquí (Pista: Particionamiento o Estructura de Min/Max Heap)\n    return 0\n",
+        "testCode": "results = []\ntests = [([3, 2, 1, 5, 6, 4], 2, 5), ([3, 2, 3, 1, 2, 4, 5, 5, 6], 4, 3), ([1, 2], 1, 2)]\nfor i, (nums, k, expected) in enumerate(tests):\n    try:\n        result = solve(nums, k)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Una solución simple (pero $N \log K$) es usar un Min-Heap (`heapq`) de tamaño `k`. Itera sobre `nums`. Si el heap tiene menos de `k` elementos, `heappush`. Si `num > heap[0]`, `heapreplace`."
+    },
+    {
+        "title": "Problema 85: N Queens (Contar Soluciones para N=4 - Backtracking)",
+        "description": "<p>Escribe una función <code>solve(n)</code> que devuelva el número de soluciones únicas para el problema de las N Reinas en un tablero de $n \\times n$.</p><p>Para las pruebas, solo debes pasar $n=4$.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(n):\n    # Escribe tu código aquí (Usa Backtracking)\n    return 0\n",
+        "testCode": "results = []\ntests = [(4, 2), (1, 1), (2, 0), (3, 0)]\nfor i, (n, expected) in enumerate(tests):\n    try:\n        result = solve(n)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa backtracking. Mantén `sets` de columnas, diagonales (fila-col) y anti-diagonales (fila+col) ocupadas. Escribe una función `dfs(fila)` que intente colocar una reina en cada `col` de esa `fila`."
+    },
+    {
+        "title": "Problema 86: Saltos Mínimos (Jump Game II)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que, dada una lista de enteros no negativos <code>nums</code>, donde <code>nums[i]</code> es la longitud máxima de salto desde la posición <code>i</code>, devuelva el número **mínimo** de saltos para llegar al último índice.</p><p>Asume que siempre se puede llegar al final.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Programación Dinámica o Greedy)\n    return 0\n",
+        "testCode": "results = []\ntests = [([2, 3, 1, 1, 4], 2), ([2, 1], 1), ([3, 0, 0, 1, 1], 1), ([1, 1, 1, 1], 3)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un enfoque Greedy (Codicioso). Mantén `saltos = 0`, `max_alcance_actual = 0`, `siguiente_max_alcance = 0`. Itera `i` sobre `nums`. Si `i > max_alcance_actual`, necesitas un salto (`saltos++`) y actualizas `max_alcance_actual = siguiente_max_alcance`."
+    },
+    {
+        "title": "Problema 87: Array Ordenado a BST (Nivel por Nivel Simple)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que construya un Árbol de Búsqueda Binaria (BST) **balanceado** a partir de una lista ordenada <code>nums</code>. Devuelve la representación del BST nivel por nivel (similar a cómo se representa un árbol binario en un array completo, con <code>None</code> para hijos faltantes).</p><p>Para el test, solo la salida de los **primeros 3 niveles** es requerida (o hasta que se acabe el árbol).</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí (Usa Recursión)\n    return []\n",
+        "testCode": "results = []\ntests = [([1, 2, 3], [2, 1, 3]), ([1, 2, 3, 4, 5, 6, 7], [4, 2, 6, 1, 3, 5, 7]), ([1, 2], [2, 1])]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Define una función recursiva `construir(sub_array)`. La raíz es el elemento medio. `raiz.izquierda = construir(sub_array_izquierdo)`, `raiz.derecha = construir(sub_array_derecho)`. (El formato de salida nivel por nivel es complicado y requiere un BFS para imprimir)."
+    },
+    {
+        "title": "Problema 88: Suma de Tres Números a Cero (Three Sum)",
+        "description": "<p>Escribe una función <code>solve(nums)</code> que encuentre todos los tripletes <code>[a, b, c]</code> únicos en la lista <code>nums</code> tal que $a + b + c = 0$.</p><p>El orden de los tripletes o de los elementos dentro no importa.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(nums):\n    # Escribe tu código aquí\n    return []\n",
+        "testCode": "results = []\n# Helper para comparar listas de listas sin importar el orden\ndef compare_triplets(result, expected):\n    result = sorted([tuple(sorted(t)) for t in result])\n    expected = sorted([tuple(sorted(t)) for t in expected])\n    return result == expected\n\ntests = [\n    ([-1, 0, 1, 2, -1, -4], [[-1, 0, 1], [-1, -1, 2]]),\n    ([0, 0, 0, 0], [[0, 0, 0]]),\n    ([1, 2, 3], [])\n]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if compare_triplets(result, expected):\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Ordena `nums`. Itera `i` sobre `nums`. Para cada `i`, usa dos punteros (`izquierda = i + 1`, `derecha = len(nums) - 1`). Mueve los punteros buscando una suma de 0. Salta los duplicados para `i`, `izquierda` y `derecha`."
+    },
+    {
+        "title": "Problema 89: Cierre de Transición (Grafo Simple)",
+        "description": "<p>Escribe una función <code>solve(adj, start, end)</code> que, dada una lista de adyacencia <code>adj</code> (diccionario, e.g., <code>{'A': ['B'], 'B': ['C'], 'C': []}</code>) de un grafo dirigido y dos nodos <code>start</code> y <code>end</code>, devuelva <code>True</code> si <code>end</code> es alcanzable desde <code>start</code>, y <code>False</code> si no.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(adj, start, end):\n    # Escribe tu código aquí (Usa DFS o BFS)\n    return False\n",
+        "testCode": "results = []\ngraph1 = {'A': ['B', 'D'], 'B': ['C'], 'C': [], 'D': ['C']}\ntests = [\n    (graph1, 'A', 'C', True),\n    (graph1, 'C', 'A', False),\n    (graph1, 'D', 'C', True),\n    (graph1, 'A', 'A', True)\n]\nfor i, (g, s, e, expected) in enumerate(tests):\n    try:\n        result = solve(g, s, e)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa DFS (o BFS) (ver problemas 65/66). Inicia la búsqueda desde `start`. Si en algún momento sacas `end` de la pila/cola, devuelve `True`. Si la búsqueda termina sin encontrarlo, devuelve `False`."
+    },
+    {
+        "title": "Problema 90: Implementar LRU Cache",
+        "description": "<p>Implementa una clase simple <code>LRUCache</code> con capacidad fija <code>capacity</code>. Debe tener los métodos <code>get(key)</code> y <code>put(key, value)</code>. <code>get</code> devuelve el valor y lo mueve al frente. <code>put</code> añade/actualiza un valor; si la caché excede la capacidad, debe eliminar el elemento usado menos recientemente (Least Recently Used).</p>",
+        "difficulty": "Difícil",
+        "starterCode": "class LRUCache:\n    def __init__(self, capacity):\n        self.capacity = capacity\n        self.cache = {}\n        # Puedes usar una lista o deque para simular el orden LRU\n\n    def get(self, key):\n        # Escribe tu código aquí\n        return -1\n\n    def put(self, key, value):\n        # Escribe tu código aquí\n        pass\n\ndef solve():\n    # El código de prueba instancia la clase\n    return LRUCache(2)\n",
+        "testCode": "results = []\ntry:\n    cache = LRUCache(2)\n    cache.put(1, 1)\n    cache.put(2, 2)\n    results.append(f\"Test 1 (put 1, 2): <span class='text-green-400'>PASSED</span>\")\n    if cache.get(1) == 1: results.append(f\"Test 2 (get 1, cache is now [2, 1]): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 2 FAILED: Se esperaba 1, se obtuvo {cache.get(1)}\")\n    cache.put(3, 3) # Elimina 2\n    if cache.get(2) == -1: results.append(f\"Test 3 (put 3, get 2): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 3 FAILED: Se esperaba -1, se obtuvo {cache.get(2)}\")\n    cache.put(4, 4) # Elimina 1\n    if cache.get(1) == -1: results.append(f\"Test 4 (put 4, get 1): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(f\"Test 4 FAILED: Se esperaba -1, se obtuvo {cache.get(1)}\")\n    if cache.get(3) == 3 and cache.get(4) == 4: results.append(f\"Test 5 (get 3, 4): <span class='text-green-400'>PASSED</span>\")\n    else: raise Exception(\"Test 5 FAILED: Elements 3 or 4 missing\")\nexcept Exception as e:\n    results.append(f\"Clase LRUCache: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa `OrderedDict` de `collections`. `get`: si existe, `move_to_end(key)`. `put`: si existe, `move_to_end(key)`. Si es nuevo y se excede la capacidad, `popitem(last=False)` (elimina el LRU)."
+    },
+    {
+        "title": "Problema 91: Expresión Postfija (Notación Polaca Inversa)",
+        "description": "<p>Escribe una función <code>solve(tokens)</code> que evalúe una expresión aritmética dada en Notación Polaca Inversa (postfija). Los <code>tokens</code> son una lista de strings (números enteros o operadores <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>).</p><p>Asume división entera (trunca hacia cero).</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(tokens):\n    # Escribe tu código aquí (Usa una Pila)\n    return 0\n",
+        "testCode": "results = []\ntests = [([\"2\", \"1\", \"+\", \"3\", \"*\"], 9), ([\"4\", \"13\", \"5\", \"/\", \"+\"], 6), ([\"10\", \"6\", \"9\", \"3\", \"+\", \"-11\", \"*\", \"/\", \"*\", \"17\", \"+\", \"5\", \"+\"], 22)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa una `pila`. Itera sobre `tokens`. Si `t` es un número, `push(int(t))`. Si `t` es un operador, `pop` dos operandos (ej. `b = pop()`, `a = pop()`), calcula `a op b`, y haz `push` del resultado."
+    },
+    {
+        "title": "Problema 92: Validar Sudoku (Parcial: Filas/Columnas)",
+        "description": "<p>Escribe una función <code>solve(board)</code> que determine si las **filas y columnas** de un tablero de Sudoku $9 \\times 9$ son válidas.</p><p>Devuelve <code>True</code> si los números del 1 al 9 en cada fila y cada columna no se repiten. Ignora el estado de las subcajas de $3 \\times 3$ por ahora. Los <code>.</code> representan celdas vacías.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(board):\n    # Escribe tu código aquí\n    return False\n",
+        "testCode": "results = []\ntests = [\n    # Válido (Filas y Columnas)\n    ([[\"5\", \"3\", \".\", \".\", \"7\", \".\", \".\", \".\", \".\"],\n      [\"6\", \".\", \".\", \"1\", \"9\", \"5\", \".\", \".\", \".\"],\n      [\".\", \"9\", \"8\", \".\", \".\", \".\", \".\", \"6\", \".\"],\n      [\"8\", \".\", \".\", \".\", \"6\", \".\", \".\", \".\", \"3\"],\n      [\"4\", \".\", \".\", \"8\", \".\", \"3\", \".\", \".\", \"1\"],\n      [\"7\", \".\", \".\", \".\", \"2\", \".\", \".\", \".\", \"6\"],\n      [\".\", \"6\", \".\", \".\", \".\", \".\", \"2\", \"8\", \".\"],\n      [\".\", \".\", \".\", \"4\", \"1\", \"9\", \".\", \".\", \"5\"],\n      [\".\", \".\", \".\", \".\", \"8\", \".\", \".\", \"7\", \"9\"]], True),\n    # Inválido (Fila 1: 8 repetido)\n    ([[\"5\", \"3\", \".\", \".\", \"7\", \".\", \".\", \".\", \".\"],\n      [\"8\", \".\", \".\", \"1\", \"9\", \"5\", \".\", \".\", \".\"],\n      [\".\", \"9\", \"8\", \".\", \".\", \".\", \".\", \"6\", \".\"],\n      [\"8\", \".\", \".\", \".\", \"6\", \".\", \".\", \".\", \"3\"],\n      [\"4\", \".\", \".\", \"8\", \".\", \"3\", \".\", \".\", \"1\"],\n      [\"7\", \".\", \".\", \".\", \"2\", \".\", \".\", \".\", \"6\"],\n      [\".\", \"6\", \".\", \".\", \".\", \".\", \"2\", \"8\", \".\"],\n      [\".\", \".\", \".\", \"4\", \"1\", \"9\", \".\", \".\", \"5\"],\n      [\".\", \".\", \".\", \".\", \"8\", \".\", \".\", \"7\", \"9\"]], False)\n]\nfor i, (b, expected) in enumerate(tests):\n    try:\n        result = solve(b)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa `sets`. Crea `filas_vistas = [set() for _ in range(9)]` y `columnas_vistas`. Itera `i` y `j` de 0 a 8. Si `board[i][j]` (y no es '.') está en `filas_vistas[i]` o `columnas_vistas[j]`, devuelve `False`. Si no, añádelo."
+    },
+    {
+        "title": "Problema 93: Juego de la Vida de Conway (Siguiente Estado)",
+        "description": "<p>Escribe una función <code>solve(board)</code> que calcule el **siguiente estado** del tablero del Juego de la Vida de Conway (Game of Life) en una matriz de $0$s (muerto) y $1$s (vivo).</p><p>Solo necesitas calcular el siguiente estado basado en las 4 reglas. Modifica el tablero **in-place**.</p>",
+        "difficulty": "Difícil",
+        "starterCode": "def solve(board):\n    # Escribe tu código aquí (Considera el estado temporal para evitar usar estados ya modificados)\n    return board\n",
+        "testCode": "results = []\ntests = [\n    ([[0, 1, 0], [0, 0, 1], [1, 1, 1], [0, 0, 0]],\n     [[0, 0, 0], [1, 0, 1], [0, 1, 1], [0, 1, 0]]),\n    ([[1, 1], [1, 0]], [[1, 1], [1, 1]]) # Sobrevive por 2 o 3 vecinos\n]\nfor i, (b, expected) in enumerate(tests):\n    try:\n        board = [row[:] for row in b]\n        result = solve(board)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Reglas: 1 (Viva, <2 vecinos) -> Muere. 2 (Viva, 2-3 vecinos) -> Vive. 3 (Viva, >3 vecinos) -> Muere. 4 (Muerta, 3 vecinos) -> Vive. Debes contar los 8 vecinos. Usa una copia del tablero para leer los estados o usa estados intermedios (ej. -1 = 'morirá', 2 = 'nacerá')."
+    },
+    {
+        "title": "Problema 94: Rotar Cadena K Veces (Izquierda)",
+        "description": "<p>Escribe una función <code>solve(s, k)</code> que rote la cadena <code>s</code> a la izquierda por <code>k</code> posiciones. Asume que <code>k</code> es no negativo.</p><p>Ejemplo: <code>solve(\"abcde\", 2)</code> -> <code>\"cdeab\"</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(s, k):\n    # Escribe tu código aquí\n    return \"\"\n",
+        "testCode": "results = []\ntests = [(\"abcde\", 2, \"cdeab\"), (\"abcdefg\", 3, \"defgabc\"), (\"a\", 1, \"a\"), (\"\", 5, \"\")]\nfor i, (s, k, expected) in enumerate(tests):\n    try:\n        result = solve(s, k)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba '{expected}', pero se obtuvo '{result}'\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja `k` grandes con `k = k % len(s)` (si `s` no está vacía). La rotación a la izquierda se hace con *slicing*: `s[k:] + s[:k]`."
+    },
+    {
+        "title": "Problema 95: Encontrar el Menor de 3 Números",
+        "description": "<p>Escribe una función <code>solve(a, b, c)</code> que devuelva el número más pequeño entre los tres números enteros <code>a</code>, <code>b</code> y <code>c</code>.</p><p>No uses la función <code>min()</code>.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(a, b, c):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(1, 5, 2, 1), (10, 3, 7, 3), (1, 1, 1, 1), (-5, 0, 5, -5)]\nfor i, (a, b, c, expected) in enumerate(tests):\n    try:\n        result = solve(a, b, c)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Inicializa `min_val = a`. Luego, `if b < min_val: min_val = b`. Haz lo mismo para `c`."
+    },
+    {
+        "title": "Problema 96: Suma de Subarrays de Tamaño K",
+        "description": "<p>Escribe una función <code>solve(nums, k)</code> que calcule la **suma** del subarray contiguo de tamaño <code>k</code> que tenga la suma más grande en la lista <code>nums</code>.</p><p>Puedes usar el patrón de ventana deslizante.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(nums, k):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [([1, 4, 2, 10, 23, 3, 1, 0, 20], 4, 39), ([1, 1, 1, 1], 2, 2), ([4, 2, 1, 7, 8, 3, 1, 2, 5], 3, 18)]\nfor i, (nums, k, expected) in enumerate(tests):\n    try:\n        result = solve(nums, k)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Patrón de Ventana Deslizante: Calcula la suma de la primera ventana (`sum(nums[0:k])`). Itera `i` desde `k` hasta `len(nums)`. En cada paso, `suma_ventana = suma_ventana - nums[i-k] + nums[i]`. Mantén el `max_suma`."
+    },
+    {
+        "title": "Problema 97: Reversar Entero",
+        "description": "<p>Escribe una función <code>solve(x)</code> que revierta los dígitos de un entero con signo <code>x</code>.</p><p>Ten cuidado con el desbordamiento: si el entero invertido está fuera del rango de 32 bits ($-2^{31}$ a $2^{31}-1$), devuelve <code>0</code>. Considera el rango $[-2147483648, 2147483647]$.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(x):\n    # Escribe tu código aquí\n    return 0\n",
+        "testCode": "results = []\ntests = [(123, 321), (-123, -321), (120, 21), (1534236469, 0), (-2147483648, 0)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Maneja el signo por separado. Convierte `abs(x)` a `str`, revierte (`[::-1]`), y convierte de nuevo a `int`. Comprueba si el resultado está entre $-2^{31}$ y $2^{31}-1$. Si no, devuelve 0."
+    },
+    {
+        "title": "Problema 98: Búsqueda Secuencial",
+        "description": "<p>Escribe una función <code>solve(nums, target)</code> que implemente la **Búsqueda Secuencial** para encontrar el índice de la primera ocurrencia del <code>target</code> en la lista <code>nums</code>.</p><p>Devuelve <code>-1</code> si el objetivo no se encuentra.</p>",
+        "difficulty": "Fácil",
+        "starterCode": "def solve(nums, target):\n    # Escribe tu código aquí\n    return -1\n",
+        "testCode": "results = []\ntests = [([1, 5, 8, 12, 13], 8, 2), ([1, 5, 8, 12, 13], 1, 0), ([1, 5, 8, 12, 13], 15, -1), ([], 5, -1)]\nfor i, (nums, target, expected) in enumerate(tests):\n    try:\n        result = solve(nums, target)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Usa un bucle `for i in range(len(nums)):`. Si `nums[i] == target`, devuelve `i`. Si el bucle termina sin encontrarlo, devuelve `-1`."
+    },
+    {
+        "title": "Problema 99: Suma de Intervalos Fusionados",
+        "description": "<p>Escribe una función <code>solve(intervals)</code> que tome una lista de intervalos (<code>[[start, end], ...]</code>), los fusione si se superponen, y devuelva la **suma total de las longitudes** de los intervalos fusionados.</p><p>Ejemplo: <code>[[1, 4], [3, 6], [10, 15]]</code> -> Fusión: <code>[[1, 6], [10, 15]]</code>. Longitud total: $(6-1) + (15-10) = 5 + 5 = 10$.</p>",
+        "difficulty": "Medio",
+        "starterCode": "def solve(intervals):\n    # Escribe tu código aquí (Pista: Ordena y luego fusiona)\n    return 0\n",
+        "testCode": "results = []\ntests = [([[1, 4], [3, 6], [10, 15]], 10), ([[1, 2], [3, 4], [5, 6]], 3), ([], 0), ([[1, 10]], 9)]\nfor i, (arg, expected) in enumerate(tests):\n    try:\n        result = solve(arg)\n        if result == expected:\n            results.append(f\"Test {i+1}: <span class'text-green-400'>PASSED</span>\")\n        else:\n            raise Exception(f\"Se esperaba {expected}, pero se obtuvo {result}\")\n    except Exception as e:\n        results.append(f\"Test {i+1}: <span class='text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "Ordena los intervalos por `start`. Itera sobre ellos, fusionando los que se superponen (similar al Problema 73). Luego, itera sobre la lista fusionada y suma `(end - start)` para cada intervalo."
+    },
+    {
+        "title": "Problema 100: Implementar Clase 'Vector2D'",
+        "description": "<p>Implementa una clase <code>Vector2D</code> que inicialice con coordenadas <code>x</code> e <code>y</code>. Debe tener dos métodos:</p><ul><li><code>add(other_vector)</code>: Devuelve un nuevo <code>Vector2D</code> que es la suma vectorial.</li><li><code>magnitude()</code>: Devuelve la magnitud (longitud) del vector. Redondea a 2 decimales.</li></ul>",
+        "difficulty": "Medio",
+        "starterCode": "import math\n\nclass Vector2D:\n    def __init__(self, x, y):\n        self.x = x\n        self.y = y\n\n    def add(self, other_vector):\n        # Escribe tu código aquí\n        return Vector2D(0, 0)\n\n    def magnitude(self):\n        # Escribe tu código aquí\n        return 0.0\n\ndef solve():\n    # El código de prueba instancia la clase\n    return Vector2D(0, 0)\n",
+        "testCode": "results = []\ntry:\n    v1 = Vector2D(3, 4)\n    v2 = Vector2D(1, -2)\n    v3 = v1.add(v2)\n    results.append(f\"Test 1 (v1.magnitude()): <span class='text-green-400'>PASSED</span>\" if v1.magnitude() == 5.0 else f\"Test 1 FAILED: Se esperaba 5.0, se obtuvo {v1.magnitude()}\")\n    results.append(f\"Test 2 (v3.x == 4): <span class='text-green-400'>PASSED</span>\" if v3.x == 4 else f\"Test 2 FAILED: Se esperaba 4, se obtuvo {v3.x}\")\n    results.append(f\"Test 3 (v3.y == 2): <span class='text-green-400'>PASSED</span>\" if v3.y == 2 else f\"Test 3 FAILED: Se esperaba 2, se obtuvo {v3.y}\")\n    results.append(f\"Test 4 (v3.magnitude()): <span class='text-green-400'>PASSED</span>\" if v3.magnitude() == 4.47 else f\"Test 4 FAILED: Se esperaba 4.47, se obtuvo {v3.magnitude()}\")\nexcept Exception as e:\n    results.append(f\"Clase Vector2D: <span class'text-red-400'>FAILED</span> - {e}\")\nif all(\"PASSED\" in res for res in results): print(\"__SUCCESS__\")\nelse: print(f\"__FAILURE__:\\n\" + \"\\n\".join(results))\n",
+        "hint": "`add`: `return Vector2D(self.x + other_vector.x, self.y + other_vector.y)`. `magnitude`: `mag = math.sqrt(self.x**2 + self.y**2)`. Devuelve `round(mag, 2)`."
+    }
+]
