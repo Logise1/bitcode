@@ -151,7 +151,7 @@
                     <p>Cargando descripción...</p>
                 </div>
 
-                <!-- N U E V O: Sección de Pista -->
+                <!-- Sección de Pista -->
                 <div class="mt-8">
                     <button id="hint-btn" class="w-full bg-yellow-600 text-gray-900 font-medium px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-wait" disabled>
                         <!-- El texto se setea por JS -->
@@ -298,8 +298,11 @@
         let editor;
         let currentProblemIndex = 0;
         
-        // N U E V O: Timer de la pista
+        // Timer de la pista
         let hintTimer = null;
+        
+        // N U E V O: Para rastrear el portapapeles interno
+        let internalClipboard = null; 
         
         // Estado de Autenticación y Progreso
         let userId = null;
@@ -319,7 +322,7 @@
             loginPasswordField, loginBtn, loginError, regEmailField,
             regPasswordField, regBtn, regError,
             userLevelHeader, userLevelMain,
-            // N U E V O: Elementos de Pista
+            // Elementos de Pista
             hintButton, hintContent;
 
         
@@ -560,7 +563,7 @@
             userLevelHeader = document.getElementById('user-level-header');
             userLevelMain = document.getElementById('user-level-main');
 
-            // N U E V O: Asignar elementos de Pista
+            // Asignar elementos de Pista
             hintButton = document.getElementById('hint-btn');
             hintContent = document.getElementById('hint-content');
         }
@@ -576,7 +579,7 @@
             loginBtn.addEventListener('click', handleLogin);
             regBtn.addEventListener('click', handleRegister);
             
-            // N U E V O: Listener para el botón de pista
+            // Listener para el botón de pista
             hintButton.addEventListener('click', showHint);
             
             authTabs.forEach(tab => {
@@ -629,6 +632,37 @@
                     tabSize: 4,
                     indentUnit: 4
                 });
+
+                // --- N U E V A LÓGICA ANTI-PEGADO ---
+                editor.on('copy', (cm) => {
+                    internalClipboard = cm.getSelection();
+                    console.log("Copiado interno detectado.");
+                });
+
+                editor.on('cut', (cm) => {
+                    internalClipboard = cm.getSelection();
+                    console.log("Corte interno detectado.");
+                });
+
+                editor.on('paste', (cm, event) => {
+                    const pastedText = event.clipboardData.getData('text/plain');
+                    
+                    // Si el portapapeles interno es nulo (no se ha copiado nada de aquí)
+                    // O si el texto pegado es DIFERENTE al portapapeles interno...
+                    if (internalClipboard === null || pastedText !== internalClipboard) {
+                        // Es un pegado externo.
+                        console.warn("Pegado externo detectado. Recargando página.");
+                        
+                        // Prevenir que el texto se pegue
+                        event.preventDefault(); 
+                        
+                        // Recargar la página
+                        location.reload();
+                    }
+                    // Si son iguales, es un pegado interno. No hacer nada y permitirlo.
+                    console.log("Pegado interno permitido.");
+                });
+                // --- FIN DE LÓGICA ANTI-PEGADO ---
                 
                 attachEventListeners();
 
@@ -751,7 +785,7 @@
         }
 
         function showProblemListView() {
-            // N U E V O: Limpiar el timer de la pista al volver a la lista
+            // Limpiar el timer de la pista al volver a la lista
             if (hintTimer) clearInterval(hintTimer);
             
             appContainer.classList.add('hidden');
@@ -759,7 +793,7 @@
             renderProblemList(); 
         }
         
-        // N U E V O: Función para mostrar la pista
+        // Función para mostrar la pista
         function showHint() {
             const problem = problems[currentProblemIndex];
             if (problem && problem.hint) {
@@ -797,7 +831,7 @@
             editor.setValue(problem.starterCode || "# Escribe tu código aquí\n");
             consoleOutput.innerText = `Problema ${index + 1} cargado.`;
 
-            // --- N U E V A LÓGICA DE PISTA ---
+            // --- LÓGICA DE PISTA ---
             hintContent.classList.add('hidden'); // Ocultar pista anterior
             if (hintTimer) clearInterval(hintTimer); // Limpiar timer anterior
             
@@ -923,7 +957,7 @@ else:
                         await saveUserProgress(); // Guardar y actualizar UI de Nivel
                     }
                     
-                    // N U E V O: Limpiar el timer de la pista al completar
+                    // Limpiar el timer de la pista al completar
                     if (hintTimer) clearInterval(hintTimer);
                     
                     setTimeout(showProblemListView, 2000); 
