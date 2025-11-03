@@ -41,12 +41,31 @@
         <span id="loading-text" class="mt-4 text-lg">Cargando Intérprete de Python (Pyodide)...</span>
     </div>
 
-    <!-- Contenedor Principal de la App (oculto al inicio) -->
+    <!-- N U E V O: Vista de Lista de Problemas (Landing) -->
+    <div id="problem-list-view" class="hidden w-full max-w-7xl h-full flex flex-col">
+        <h1 class="text-3xl font-bold text-white mb-6 flex-shrink-0">Problemas de Python</h1>
+        <div class="flex-grow overflow-y-auto pr-2">
+             <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Las tarjetas de problemas se insertarán aquí dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- M O D I F I C A D O: Contenedor Principal de la App (Editor) -->
     <div id="app-container" class="hidden w-full max-w-7xl h-full flex flex-col md:flex-row gap-4">
 
         <!-- Panel Izquierdo: Problema -->
         <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg h-full overflow-y-auto">
+            
+            <!-- N U E V O: Botón de Volver -->
+            <div class="flex-shrink-0">
+                <button id="back-to-list-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm">
+                    &larr; Volver a la lista
+                </button>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg flex-grow h-full overflow-y-auto">
                 <h1 id="problem-title" class="text-2xl font-bold text-blue-300 mb-4"></h1>
                 <div id="problem-description" class="prose prose-invert text-gray-300">
                     <!-- Descripción del problema -->
@@ -76,7 +95,7 @@
                 </div>
             </div>
 
-            <!-- Botones de Navegación -->
+            <!-- Botones de Navegación (Ahora menos importantes, pero útiles) -->
             <div class="flex justify-between">
                 <button id="prev-problem" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">
                     &larr; Anterior
@@ -95,30 +114,41 @@
     </div>
 
     <script type="module">
-        // --- 1. Definición de Problemas ---
-        // ¡YA NO ESTÁ AQUÍ! Se cargará desde la URL
-        let problems = []; // Array vacío que llenaremos con fetch
-
-        // --- 2. Variables Globales ---
+        // --- 1. Variables Globales ---
+        let problems = []; // Se llenará con fetch
         let pyodide;
         let editor;
         let currentProblemIndex = 0;
 
+        // Elementos de la UI
         const loadingScreen = document.getElementById('loading-screen');
         const loadingText = document.getElementById('loading-text');
+        
+        // Vistas
+        const problemListView = document.getElementById('problem-list-view');
         const appContainer = document.getElementById('app-container');
         
+        // Vista de Lista
+        const problemGrid = document.getElementById('problem-grid');
+
+        // Vista de Editor
         const problemTitle = document.getElementById('problem-title');
         const problemDescription = document.getElementById('problem-description');
         const codeEditor = document.getElementById('code-editor');
         const consoleOutput = document.getElementById('console-output');
         
+        // Botones
+        const backToListBtn = document.getElementById('back-to-list-btn');
         const runButton = document.getElementById('run-code');
         const submitButton = document.getElementById('submit-code');
         const prevButton = document.getElementById('prev-problem');
         const nextButton = document.getElementById('next-problem');
+        
+        // Iconos SVG para la lista
+        const lockIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>`;
+        const checkIcon = `<svg class="w-5 h-5 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
 
-        // --- 3. Funciones Principales ---
+        // --- 2. Funciones de Lógica de la App ---
 
         /**
          * Función principal de inicialización.
@@ -127,19 +157,14 @@
             try {
                 // Cargar Pyodide y los problemas del JSON *en paralelo*
                 const pyodidePromise = loadPyodide();
-                
-                // CAMBIO: Cargar desde la URL proporcionada
-                const problemsPromise = fetch("https://logise1.github.io/bitcode/problems.array")
+                const problemsPromise = fetch("my_problems.json")
                     .then(res => {
-                        if (!res.ok) {
-                            throw new Error(`Error HTTP! status: ${res.status}`);
-                        }
-                        return res.json(); // Asumimos que es un JSON
+                        if (!res.ok) throw new Error(`Error HTTP! status: ${res.status}`);
+                        return res.json();
                     })
                     .catch(e => {
-                        console.error("Error al cargar o parsear 'problems.array':", e);
-                        // Mostrar un error claro al usuario
-                        loadingText.innerText = `Error al cargar problemas desde la URL. ¿Es un JSON válido? \n${e}`;
+                        console.error("Error al cargar 'my_problems.json':", e);
+                        loadingText.innerText = `Error al cargar 'my_problems.json'. ¿Existe y es un JSON válido? \n${e}`;
                         throw e; // Detener la ejecución
                     });
 
@@ -151,7 +176,7 @@
                 problems = await problemsPromise;
                 console.log("Problemas cargados:", problems);
 
-                // Inicializar CodeMirror
+                // Inicializar CodeMirror (solo una vez)
                 editor = CodeMirror.fromTextArea(codeEditor, {
                     lineNumbers: true,
                     mode: "python",
@@ -162,15 +187,12 @@
                     indentUnit: 4
                 });
 
-                 // Cargar el primer problema
-                loadProblem(currentProblemIndex);
+                 // Renderizar la lista de problemas
+                renderProblemList();
                 
-                // Ocultar loader y mostrar app
+                // Ocultar loader y mostrar la VISTA DE LISTA
                 loadingScreen.classList.add('hidden');
-                appContainer.classList.remove('hidden');
-                
-                // Forzar refresco del editor
-                editor.refresh();
+                problemListView.classList.remove('hidden');
 
             } catch (error) {
                 console.error("Error en la inicialización:", error);
@@ -181,23 +203,128 @@
         }
 
         /**
-         * Carga un problema en la UI.
+         * Obtiene los índices de problemas resueltos desde localStorage.
+         */
+        function getSolvedProblems() {
+            const solved = localStorage.getItem('solvedProblems');
+            if (!solved) {
+                return []; // Devuelve un array de índices
+            }
+            try {
+                const parsed = JSON.parse(solved);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        /**
+         * Renderiza la cuadrícula de problemas en la "landing page".
+         */
+        function renderProblemList() {
+            const solvedProblems = getSolvedProblems();
+            // El usuario puede acceder a problemas hasta el índice = número de resueltos.
+            // Ej: 0 resueltos -> puede acceder a índice 0.
+            // Ej: 1 resuelto (índice 0) -> puede acceder a índice 1.
+            const unlockedUpTo = solvedProblems.length; 
+            
+            problemGrid.innerHTML = ''; // Limpiar grid
+
+            problems.forEach((problem, index) => {
+                const isSolved = solvedProblems.includes(index);
+                // Un problema está desbloqueado si su índice es <= que el número de problemas resueltos
+                const isUnlocked = index <= unlockedUpTo;
+
+                let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48";
+                let cardIcon = "";
+                let difficultyColor = "text-green-400";
+                if (problem.difficulty === "Medio") difficultyColor = "text-yellow-400";
+                if (problem.difficulty === "Difícil") difficultyColor = "text-red-400";
+
+                
+                if (isSolved) {
+                    cardClasses += " border-2 border-green-500 cursor-pointer hover:bg-gray-700 transition-all";
+                    cardIcon = `<div class="font-medium text-sm flex items-center text-green-400">${checkIcon} Resuelto</div>`;
+                } else if (isUnlocked) {
+                    cardClasses += " cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all";
+                    cardIcon = `<div class="font-medium text-sm flex items-center text-blue-400">Resolver Ahora &rarr;</div>`;
+                } else {
+                    cardClasses += " opacity-50 cursor-not-allowed";
+                    cardIcon = `<div class="font-medium text-sm flex items-center text-gray-500">${lockIcon} Bloqueado</div>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = cardClasses;
+                
+                card.innerHTML = `
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-2">${problem.title || 'Sin Título'}</h3>
+                        <span class="text-sm ${difficultyColor}">
+                            ${problem.difficulty || 'Fácil'}
+                        </span>
+                    </div>
+                    ${cardIcon}
+                `;
+
+                if (isUnlocked) {
+                    // Solo añadir evento de clic si está desbloqueado
+                    card.addEventListener('click', () => showEditorView(index));
+                }
+
+                problemGrid.appendChild(card);
+            });
+        }
+
+        /**
+         * Oculta la lista y muestra el editor para un problema específico.
+         */
+        function showEditorView(index) {
+            problemListView.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            currentProblemIndex = index;
+            loadProblem(index);
+            editor.refresh(); // ¡Importante! Refrescar CM cuando se hace visible
+        }
+
+        /**
+         * Oculta el editor y muestra la lista de problemas.
+         */
+        function showProblemListView() {
+            appContainer.classList.add('hidden');
+            problemListView.classList.remove('hidden');
+            renderProblemList(); // Re-renderizar para mostrar el nuevo estado (ej. problema resuelto)
+        }
+
+
+        /**
+         * Carga un problema en la UI del Editor.
          */
         function loadProblem(index) {
+            if (index < 0 || index >= problems.length) {
+                console.error("Índice de problema inválido:", index);
+                return;
+            }
+            
             const problem = problems[index];
-            problemTitle.innerText = problem.title;
-            problemDescription.innerHTML = problem.description;
+            if (!problem) {
+                console.error("No se encontró el problema en el índice:", index);
+                return;
+            }
+
+            problemTitle.innerText = problem.title || "Problema sin título";
+            problemDescription.innerHTML = problem.description || "<p>Sin descripción.</p>";
             
             // Añadir la dificultad a la descripción
+            const difficulty = problem.difficulty || "Fácil";
             let difficultyColor = "text-green-400"; // Fácil
-            if (problem.difficulty === "Medio") {
+            if (difficulty === "Medio") {
                 difficultyColor = "text-yellow-400";
-            } else if (problem.difficulty === "Difícil") {
+            } else if (difficulty === "Difícil") {
                 difficultyColor = "text-red-400";
             }
-            problemTitle.innerHTML += ` <span class="text-sm ${difficultyColor} font-normal">(${problem.difficulty})</span>`;
+            problemTitle.innerHTML += ` <span class="text-sm ${difficultyColor} font-normal">(${difficulty})</span>`;
 
-            editor.setValue(problem.starterCode);
+            editor.setValue(problem.starterCode || "# Escribe tu código aquí\n");
             consoleOutput.innerText = `Problema ${index + 1} cargado.`;
             
             // Actualizar estado de botones de navegación
@@ -214,7 +341,7 @@
         }
 
         /**
-         * Ejecuta el código del usuario SIN los tests, solo lo que está en el editor.
+         * Ejecuta el código del usuario SIN los tests.
          */
         async function runCode() {
             const userCode = editor.getValue();
@@ -222,20 +349,13 @@
             setButtonsDisabled(true);
 
             try {
-                // Configurar stdout y stderr para capturarlos
                 await pyodide.runPythonAsync(`
-                    import sys
-                    import io
+                    import sys, io
                     sys.stdout = io.StringIO()
                     sys.stderr = io.StringIO()
                 `);
-
-                // Ejecutar el código del usuario
                 let result = await pyodide.runPythonAsync(userCode);
-                
-                // Obtener la salida estándar
                 let stdout = await pyodide.runPythonAsync("sys.stdout.getvalue()");
-                // Obtener la salida de error
                 let stderr = await pyodide.runPythonAsync("sys.stderr.getvalue()");
                 
                 if (stderr) {
@@ -243,7 +363,6 @@
                 } else if (stdout) {
                     consoleOutput.innerText = stdout;
                 } else if (result !== undefined && result !== null) {
-                    // Si no hubo print() pero la última línea devolvió algo
                     consoleOutput.innerText = String(result);
                 } else {
                     consoleOutput.innerText = "(Sin salida)";
@@ -271,71 +390,61 @@
             consoleOutput.innerText = "Ejecutando pruebas...";
             setButtonsDisabled(true);
 
-            // FIX: ¡La indentación es necesaria!
-            // El código del usuario y el código de prueba deben estar
-            // indentados con 4 espacios para encajar en el bloque 'try:'
             const indentedUserCode = userCode.replace(/^/gm, '    ');
             const indentedTestCode = problem.testCode.replace(/^/gm, '    ');
 
-
-            // Código completo (código del usuario + código de prueba)
             const fullScript = `
-import sys
-import io
-
+import sys, io
 sys.stdout = io.StringIO()
 sys.stderr = io.StringIO()
 output = ""
-
 try:
     # --- Código del Usuario ---
 ${indentedUserCode}
     # --- Fin del Código del Usuario ---
-
     # --- Arnés de Pruebas ---
 ${indentedTestCode}
     # --- Fin del Arnés de Pruebas ---
-
 except Exception as e:
-    # Capturar errores de sintaxis o runtime EN EL CÓDIGO DEL USUARIO/TESTS
     print(f"__FAILURE__: Error de sintaxis o ejecución: {e}")
-
 stdout_value = sys.stdout.getvalue()
 stderr_value = sys.stderr.getvalue()
-
 if stderr_value:
     output = f"Error de Runtime:\\n{stderr_value}"
 else:
     output = stdout_value
-
-# Devolver la salida
 {'output': output}
             `;
             
             try {
-                // Ejecutar el script completo
                 let resultProxy = await pyodide.runPythonAsync(fullScript);
-                let result = resultProxy.toJs(); // Convertir PyProxy a objeto JS
+                let result = resultProxy.toJs();
                 resultProxy.destroy();
                 
                 let output = result.output;
 
-                // Interpretar la salida del arnés de pruebas
                 if (output.includes("__SUCCESS__")) {
                     consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
-                    // Podríamos añadir lógica para pasar al siguiente problema
-                    setTimeout(nextProblem, 2000); // Avanza auto
+                    
+                    // --- N U E V O: Guardar Progreso ---
+                    let solved = getSolvedProblems();
+                    if (!solved.includes(currentProblemIndex)) {
+                        solved.push(currentProblemIndex);
+                        solved.sort((a, b) => a - b); // Mantenerlos ordenados
+                        localStorage.setItem('solvedProblems', JSON.stringify(solved));
+                    }
+                    
+                    // Volver a la lista después de 2 segundos
+                    setTimeout(showProblemListView, 2000); 
+
                 } else if (output.includes("__FAILURE__:")) {
-                    // Extraer solo el mensaje de error
                     let errorMsg = output.split("__FAILURE__:")[1] || "Tests fallidos.";
                     consoleOutput.innerHTML = `<span class="text-red-400 font-bold">Solución Incorrecta:</span>\n${errorMsg.trim()}`;
                 } else {
-                    // Salida inesperada (ej. si el test code falló)
                     consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test:</span>\n${output}`;
                 }
 
             } catch (e) {
-                // Capturar errores del intérprete de Pyodide (ej. error en NUESTRO script)
                 consoleOutput.innerHTML = `<span class="text-red-500">Error del intérprete:</span>\n${e.message}`;
             }
 
@@ -343,7 +452,7 @@ else:
         }
 
         /**
-         * Carga el siguiente problema.
+         * Carga el siguiente problema (navegación en el editor).
          */
         function nextProblem() {
             if (currentProblemIndex < problems.length - 1) {
@@ -353,7 +462,7 @@ else:
         }
         
         /**
-         * Carga el problema anterior.
+         * Carga el problema anterior (navegación en el editor).
          */
         function prevProblem() {
             if (currentProblemIndex > 0) {
@@ -362,13 +471,14 @@ else:
             }
         }
 
-        // --- 4. Event Listeners ---
+        // --- 3. Event Listeners ---
+        backToListBtn.addEventListener('click', showProblemListView);
         runButton.addEventListener('click', runCode);
         submitButton.addEventListener('click', submitCode);
         prevButton.addEventListener('click', prevProblem);
         nextButton.addEventListener('click', nextProblem);
 
-        // --- 5. Ejecución ---
+        // --- 4. Ejecución ---
         main();
 
     </script>
