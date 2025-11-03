@@ -54,19 +54,55 @@
     <!-- 2. Vista de Lista de Problemas (Landing Page) -->
     <div id="problem-list-view" class="h-full flex-col hidden">
         <!-- Header -->
-        <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center w-full z-10">
+        <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center w-full z-10 sticky top-0">
             <h1 class="text-2xl font-bold text-white">BitCode</h1>
-            <div class="flex items-center space-x-4">
-                <span id="user-status-header" class="text-gray-300 text-sm">Invitado</span>
+            <!-- N U E V O: Contenedor de Usuario con Nivel -->
+            <div class="flex items-center space-x-6">
+                <div class="flex items-center space-x-2" title="Tu nivel se basa en los problemas resueltos">
+                    <svg class="w-5 h-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10.868 2.884c.321-.772 1.415-.772 1.736 0l1.83 4.401 4.853.704c.807.118 1.13.964.548 1.502l-3.51 3.42.83 4.833c.138.803-.703 1.43-1.423.957L10 15.348l-4.318 2.27c-.72.473-1.561-.154-1.423-.957l.83-4.833-3.51-3.42c-.583-.538-.26-1.384.548-1.502l4.853-.704 1.83-4.401Z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-sm font-medium text-gray-300">Nivel: <span id="user-level-header" class="font-bold text-white">0</span></span>
+                </div>
+                <div class="w-px h-6 bg-gray-600"></div> <!-- Separador -->
+                <span id="user-status-header" class="text-gray-300 text-sm hidden sm:block">Invitado</span>
                 <button id="login-btn-header" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">Iniciar Sesión</button>
                 <button id="logout-btn-header" class="hidden bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">Cerrar Sesión</button>
             </div>
         </header>
 
-        <!-- Contenedor principal de la lista (con scroll) -->
-        <main class="flex-1 overflow-y-auto p-6 md:p-10">
-            <div class="max-w-7xl mx-auto">
-                <h2 class="text-3xl font-bold text-white mb-6">Problemas de Python</h2>
+        <!-- N U E V O: Contenedor principal de la lista (con scroll) -->
+        <main class="flex-1 overflow-y-auto">
+            
+            <!-- 1. Banner (Hero Section) -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-10 md:p-16 text-white shadow-lg">
+                <div class="max-w-7xl mx-auto">
+                    <h2 class="text-4xl md:text-5xl font-bold">Python</h2>
+                    <p class="text-xl text-blue-100 mt-2 max-w-2xl">Domina la lógica y resuelve problemas, un desafío a la vez.</p>
+                </div>
+            </div>
+
+            <!-- 2. Contenido Principal (Stats + Grid) -->
+            <div class="max-w-7xl mx-auto p-6 md:p-10">
+                
+                <!-- 2a. Stats Card (Mi Nivel) -->
+                <div class="bg-gray-800 rounded-lg shadow-xl p-6 mb-8 border border-gray-700">
+                    <h3 class="text-xl font-semibold text-white mb-4">Tu Progreso</h3>
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-blue-600 rounded-full">
+                            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" />
+                            </svg>
+                        </div>
+                        <div>
+                            <span class="text-gray-400 text-sm">NIVEL ACTUAL</span>
+                            <p id="user-level-main" class="text-3xl font-bold text-white">0</p>
+                        </div>
+                    </div>
+                </div>
+            
+                <!-- 2b. Problem Grid -->
+                <h3 class="text-3xl font-bold text-white mb-6">Lista de Problemas</h3>
                 <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     <!-- Las tarjetas de problemas se generan aquí -->
                 </div>
@@ -78,7 +114,7 @@
     <!-- 3. Vista del Editor de Problemas -->
     <div id="app-container" class="h-full flex-col hidden">
         <!-- Barra de botones superior -->
-        <header class="bg-gray-800 shadow-md p-2 flex justify-between items-center w-full z-10">
+        <header class="bg-gray-800 shadow-md p-2 flex justify-between items-center w-full z-10 sticky top-0">
             <button id="back-to-list-btn" class="text-sm bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors flex items-center">
                 <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -239,7 +275,6 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
         
         // --- 1. Variables Globales (Declaradas) ---
-        // N O T A: Se asignarán en main()
         let problems = []; 
         let pyodide;
         let editor;
@@ -261,7 +296,9 @@
             backToListBtn, runButton, submitButton, authModal,
             closeAuthModalBtn, authTabs, authContents, loginEmailField,
             loginPasswordField, loginBtn, loginError, regEmailField,
-            regPasswordField, regBtn, regError;
+            regPasswordField, regBtn, regError,
+            // N U E V O: Elementos de Nivel
+            userLevelHeader, userLevelMain;
 
         
         // Iconos SVG para la lista
@@ -292,24 +329,26 @@
         
         // --- 3. Funciones de Autenticación y UI ---
 
-        /**
-         * Muestra/Oculta el modal de autenticación
-         */
         function showAuthModal() { 
             authModal.classList.remove('hidden'); 
-            problemListView.classList.add('blurred'); // Añadir blur
+            problemListView.classList.add('blurred'); 
         }
         function hideAuthModal() { 
             authModal.classList.add('hidden'); 
-            problemListView.classList.remove('blurred'); // Quitar blur
-            // Limpiar errores
+            problemListView.classList.remove('blurred'); 
             loginError.innerText = "";
             regError.innerText = "";
         }
 
         /**
-         * Actualiza la UI del header según el estado de auth
+         * N U E V O: Actualiza la UI del nivel
          */
+        function updateLevelUI() {
+            const level = solvedProblemsList.length;
+            if (userLevelHeader) userLevelHeader.innerText = level;
+            if (userLevelMain) userLevelMain.innerText = level;
+        }
+
         function updateAuthUI(email, isUserGuest) {
             userStatusHeader.innerText = email;
             if (isUserGuest) {
@@ -321,9 +360,6 @@
             }
         }
 
-        /**
-         * Maneja el login
-         */
         async function handleLogin() {
             const email = loginEmailField.value;
             const password = loginPasswordField.value;
@@ -337,9 +373,6 @@
             }
         }
 
-        /**
-         * Maneja el registro
-         */
         async function handleRegister() {
             const email = regEmailField.value;
             const password = regPasswordField.value;
@@ -361,13 +394,9 @@
             }
         }
 
-        /**
-         * Maneja el logout
-         */
         async function handleLogout() {
             try {
                 await signOut(auth);
-                // onAuthStateChanged se encargará de cambiar a modo invitado
             } catch (error) {
                 console.error("Error al cerrar sesión:", error);
             }
@@ -375,9 +404,6 @@
 
         // --- 4. Funciones de Progreso (Híbridas) ---
 
-        /**
-         * Carga el progreso del usuario (localStorage o Firestore)
-         */
         async function loadUserProgress() {
             if (isGuest) {
                 // Cargar desde localStorage
@@ -405,32 +431,27 @@
             }
             
             console.log(`Cargando progreso de Firestore para userId: ${userId} ...`);
-            // Ruta de Firestore: /artifacts/{appId}/users/{userId}/progress/main
             const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
             try {
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // Fusionar progreso local (invitado) con el de Firestore al iniciar sesión
                     const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
                     const remoteSolved = data.solved || [];
                     const mergedSolved = [...new Set([...localSolved, ...remoteSolved])];
                     
                     solvedProblemsList = mergedSolved;
                     
-                    // Si hubo fusión, guardar de nuevo en Firestore
                     if (mergedSolved.length > remoteSolved.length || localSolved.length > 0) {
                         await saveUserProgress(); 
                     }
-                    // Limpiar el local storage después de la fusión
                     localStorage.removeItem('solvedProblems');
 
                 } else {
-                    // No existe documento remoto, usar el local y guardarlo
                     const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
                     solvedProblemsList = localSolved;
                     if (localSolved.length > 0) {
-                        await saveUserProgress(); // Guardar el progreso local en la nube
+                        await saveUserProgress(); 
                         localStorage.removeItem('solvedProblems');
                     }
                 }
@@ -441,9 +462,6 @@
             }
         }
 
-        /**
-         * Guarda el progreso del usuario (localStorage o Firestore)
-         */
         async function saveUserProgress() {
             if (isGuest) {
                 // Guardar en localStorage
@@ -454,6 +472,8 @@
                 } catch (e) {
                     console.error("Error al guardar en localStorage:", e);
                 }
+                // N U E V O: Actualizar UI de nivel al guardar
+                updateLevelUI();
                 return; 
             }
 
@@ -468,14 +488,13 @@
             try {
                 await setDoc(docRef, { solved: solvedProblemsList });
                 console.log("Progreso de Firestore guardado.");
+                // N U E V O: Actualizar UI de nivel al guardar
+                updateLevelUI();
             } catch (error) {
                 console.error("Error al guardar progreso en Firestore:", error);
             }
         }
 
-        /**
-         * Devuelve la lista de progreso cargada en memoria.
-         */
         function getSolvedProblems() {
             return solvedProblemsList;
         }
@@ -483,9 +502,6 @@
 
         // --- 5. Funciones de Lógica de la App ---
 
-        /**
-         * N U E V O: Asigna todas las variables de elementos del DOM
-         */
         function assignDomElements() {
             audioEnter = document.getElementById('audio-enter');
             audioExecute = document.getElementById('audio-execute');
@@ -523,24 +539,23 @@
             regPasswordField = document.getElementById('register-password');
             regBtn = document.getElementById('register-btn');
             regError = document.getElementById('reg-error');
+
+            // N U E V O: Asignar elementos de Nivel
+            userLevelHeader = document.getElementById('user-level-header');
+            userLevelMain = document.getElementById('user-level-main');
         }
 
-        /**
-         * N U E V O: Asigna todos los event listeners
-         */
         function attachEventListeners() {
             backToListBtn.addEventListener('click', showProblemListView);
             runButton.addEventListener('click', runCode);
             submitButton.addEventListener('click', submitCode);
 
-            // Listeners de Auth
             loginButtonHeader.addEventListener('click', showAuthModal);
             logoutButtonHeader.addEventListener('click', handleLogout);
             closeAuthModalBtn.addEventListener('click', hideAuthModal);
             loginBtn.addEventListener('click', handleLogin);
             regBtn.addEventListener('click', handleRegister);
             
-            // Listener para las pestañas del modal
             authTabs.forEach(tab => {
                 tab.addEventListener('click', () => {
                     const target = document.querySelector(tab.dataset.authTab);
@@ -551,26 +566,18 @@
                     authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
                     tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
                     
-                    // Limpiar errores al cambiar de pestaña
                     loginError.innerText = "";
                     regError.innerText = "";
                 });
             });
         }
 
-
-        /**
-         * Función principal de inicialización
-         */
         async function main() {
-            // N U E V O: 1. Asignar elementos del DOM ahora que está cargado
             assignDomElements();
 
             try {
-                // 2. Configurar el listener de Auth
                 await setupAuthListener();
 
-                // 3. Cargar Pyodide y los problemas del JSON *en paralelo*
                 const pyodidePromise = loadPyodide();
                 const problemsPromise = fetch("my_problems.json")
                     .then(res => {
@@ -580,10 +587,9 @@
                     .catch(e => {
                         console.error("Error al cargar 'my_problems.json':", e);
                         loadingText.innerText = `Error al cargar 'my_problems.json'. ¿Existe y es un JSON válido? \n${e}`;
-                        throw e; // Detener la ejecución
+                        throw e; 
                     });
 
-                // 4. Esperar a que ambas promesas se completen
                 pyodide = await pyodidePromise;
                 console.log("Pyodide cargado.");
                 
@@ -591,7 +597,6 @@
                 problems = await problemsPromise;
                 console.log("Problemas cargados:", problems);
 
-                // 5. Inicializar CodeMirror (solo una vez)
                 editor = CodeMirror.fromTextArea(codeEditor, {
                     lineNumbers: true,
                     mode: "python",
@@ -602,14 +607,11 @@
                     indentUnit: 4
                 });
                 
-                // 6. Asignar Listeners ahora que todo está listo
                 attachEventListeners();
 
-                // 7. Ocultar loader y mostrar la VISTA DE LISTA
                 loadingScreen.classList.add('hidden');
                 problemListView.classList.remove('hidden');
                 
-                // 8. Renderizar la lista de problemas
                 renderProblemList();
 
             } catch (error) {
@@ -620,61 +622,57 @@
             }
         }
         
-        /**
-         * Listener de Auth (Sin login anónimo)
-         */
         function setupAuthListener() {
             return new Promise((resolve) => {
                 onAuthStateChanged(auth, async (user) => {
                     if (user && !user.isAnonymous) {
-                        // Usuario está logueado (REAL)
                         userId = user.uid;
                         isGuest = false;
                         userEmail = user.email || `Usuario (${user.uid.substring(0, 5)})`;
-                        
                         console.log(`Estado de Auth cambiado: ${userEmail}, Logueado`);
                         
                         updateAuthUI(userEmail, isGuest);
-                        await loadUserProgress(); // Cargar progreso desde Firestore + Fusión
-                        renderProblemList(); // Re-renderizar lista con el progreso
+                        await loadUserProgress(); 
+                        updateLevelUI(); // N U E V O: Actualizar Nivel
+                        renderProblemList(); 
                         
                     } else {
-                        // No hay usuario, MODO INVITADO
                         console.log("No hay usuario, cambiando a Modo Invitado (localStorage)...");
                         userId = null;
                         isGuest = true;
                         userEmail = "Invitado";
                         
                         updateAuthUI(userEmail, isGuest);
-                        await loadUserProgress(); // Cargar progreso desde localStorage
-                        renderProblemList(); // Renderizar lista con progreso local
+                        await loadUserProgress(); 
+                        updateLevelUI(); // N U E V O: Actualizar Nivel
+                        renderProblemList(); 
                     }
-                    resolve(); // Resuelve la promesa una vez que el estado de auth está listo
+                    resolve(); 
                 });
             });
         }
 
 
-        /**
-         * Renderiza la cuadrícula de problemas
-         */
         function renderProblemList() {
-            // No renderizar si los problemas aún no se han cargado
             if (problems.length === 0 || !problemGrid) {
                 console.log("RenderProblemList saltado, problemas o grid no cargados.");
                 return;
             }
+
+            // N U E V O: Actualizar la UI de nivel CADA VEZ que se renderiza la lista
+            updateLevelUI();
             
             const solvedProblems = getSolvedProblems();
             const unlockedUpTo = solvedProblems.length; 
             
-            problemGrid.innerHTML = ''; // Limpiar grid
+            problemGrid.innerHTML = ''; 
 
             problems.forEach((problem, index) => {
                 const isSolved = solvedProblems.includes(index);
                 const isUnlocked = isSolved || (index === unlockedUpTo);
 
-                let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all";
+                // N U E V O: Clases de tarjeta mejoradas
+                let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all duration-200 ease-in-out border-l-4";
                 let cardIcon = "";
                 let difficultyColor = "text-green-400";
                 if (problem.difficulty === "Medio") difficultyColor = "text-yellow-400";
@@ -682,13 +680,13 @@
 
                 
                 if (isSolved) {
-                    cardClasses += " border-l-4 border-green-500 cursor-pointer hover:bg-gray-700";
+                    cardClasses += " border-green-500 cursor-pointer hover:bg-gray-700 hover:shadow-green-500/30 hover:scale-[1.03]";
                     cardIcon = `<div class="font-medium text-sm flex items-center text-green-400">${checkIcon} Resuelto</div>`;
                 } else if (isUnlocked) {
-                    cardClasses += " border-l-4 border-blue-500 cursor-pointer hover:ring-2 hover:ring-blue-500";
-                    cardIcon = `<div class="font-medium text-sm flex items-center text-blue-400">Resolver Ahora &rarr;</div>`;
+                    cardClasses += " border-blue-500 cursor-pointer hover:ring-2 hover:ring-blue-500 hover:scale-[1.03]";
+                    cardIcon = `<div class="font-bold text-sm flex items-center text-blue-400">Resolver Ahora &rarr;</div>`;
                 } else {
-                    cardClasses += " opacity-50 cursor-not-allowed border-l-4 border-gray-600";
+                    cardClasses += " opacity-50 cursor-not-allowed border-gray-600";
                     cardIcon = `<div class="font-medium text-sm flex items-center text-gray-500">${lockIcon} Bloqueado</div>`;
                 }
 
@@ -707,11 +705,10 @@
 
                 if (isUnlocked) {
                     card.addEventListener('click', () => {
-                        // Comprobar si es invitado Y está intentando acceder a problema > 0
                         if (isGuest && index > 0) {
-                            showAuthModal(); // Pedir login/registro
+                            showAuthModal(); 
                         } else {
-                            showEditorView(index); // Permitir acceso
+                            showEditorView(index); 
                         }
                     });
                 }
@@ -720,32 +717,21 @@
             });
         }
 
-        /**
-         * Oculta la lista y muestra el editor para un problema específico.
-         */
         function showEditorView(index) {
-            playEnterSound(); // Sonido al entrar
+            playEnterSound(); 
             problemListView.classList.add('hidden');
             appContainer.classList.remove('hidden');
             currentProblemIndex = index;
             loadProblem(index);
-            // Refrescar CodeMirror DESPUÉS de que sea visible
             setTimeout(() => editor.refresh(), 0);
         }
 
-        /**
-         * Oculta el editor y muestra la lista de problemas.
-         */
         function showProblemListView() {
             appContainer.classList.add('hidden');
             problemListView.classList.remove('hidden');
-            renderProblemList(); // Re-renderizar para mostrar el nuevo estado
+            renderProblemList(); 
         }
 
-
-        /**
-         * Carga un problema en la UI del Editor.
-         */
         function loadProblem(index) {
             if (index < 0 || index >= problems.length) {
                 console.error("Índice de problema inválido:", index);
@@ -761,9 +747,8 @@
             problemTitle.innerText = problem.title || "Problema sin título";
             problemDescription.innerHTML = problem.description || "<p>Sin descripción.</p>";
             
-            // Añadir la dificultad a la descripción
             const difficulty = problem.difficulty || "Fácil";
-            let difficultyColor = "text-green-400"; // Fácil
+            let difficultyColor = "text-green-400"; 
             if (difficulty === "Medio") {
                 difficultyColor = "text-yellow-400";
             } else if (difficulty === "Difícil") {
@@ -775,35 +760,26 @@
             consoleOutput.innerText = `Problema ${index + 1} cargado.`;
         }
 
-        /**
-         * Habilita o deshabilita los botones.
-         */
         function setButtonsDisabled(disabled) {
             runButton.disabled = disabled;
             submitButton.disabled = disabled;
         }
 
-        /**
-         * Ejecuta el código del usuario SIN los tests.
-         */
         async function runCode() {
-            playExecuteSound(); // Sonido al ejecutar
+            playExecuteSound(); 
             const userCode = editor.getValue();
             consoleOutput.innerText = "Ejecutando...";
             setButtonsDisabled(true);
 
             try {
-                // Limpiar stdout/stderr de Pyodide
                 await pyodide.runPythonAsync(`
                     import sys, io
                     sys.stdout = io.StringIO()
                     sys.stderr = io.StringIO()
                 `);
                 
-                // Ejecutar el código del usuario
                 let result = await pyodide.runPythonAsync(userCode);
                 
-                // Capturar salidas
                 let stdout = await pyodide.runPythonAsync("sys.stdout.getvalue()");
                 let stderr = await pyodide.runPythonAsync("sys.stderr.getvalue()");
                 
@@ -824,11 +800,8 @@
             setButtonsDisabled(false);
         }
 
-        /**
-         * Ejecuta el código del usuario CON los tests
-         */
         async function submitCode() {
-            playExecuteSound(); // Sonido al ejecutar
+            playExecuteSound(); 
             const userCode = editor.getValue();
             const problem = problems[currentProblemIndex];
             
@@ -878,13 +851,13 @@ else:
                 let output = result.output;
 
                 if (output.includes("__SUCCESS__")) {
-                    playCompleteSound(); // Sonido de éxito
+                    playCompleteSound(); 
                     consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
                     
                     if (!solvedProblemsList.includes(currentProblemIndex)) {
                         solvedProblemsList.push(currentProblemIndex);
                         solvedProblemsList.sort((a, b) => a - b); 
-                        await saveUserProgress(); // Guardar (en localStorage o Firestore)
+                        await saveUserProgress(); // Guardar y actualizar UI de Nivel
                     }
                     
                     setTimeout(showProblemListView, 2000); 
@@ -904,7 +877,6 @@ else:
         }
 
         // --- 7. Ejecución ---
-        // N U E V O: Esperar a que el DOM esté listo antes de ejecutar main()
         document.addEventListener('DOMContentLoaded', main);
 
     </script>
