@@ -150,20 +150,27 @@
                 <div id="problem-description" class="prose prose-invert prose-p:text-gray-300 prose-headings:text-white prose-li:text-gray-300 prose-code:text-yellow-300">
                     <p>Cargando descripción...</p>
                 </div>
+
+                <!-- N U E V O: Sección de Pista -->
+                <div class="mt-8">
+                    <button id="hint-btn" class="w-full bg-yellow-600 text-gray-900 font-medium px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-wait" disabled>
+                        <!-- El texto se setea por JS -->
+                    </button>
+                    <div id="hint-content" class="hidden mt-4 p-4 bg-gray-800 border border-yellow-500 rounded-lg text-yellow-200">
+                        <!-- El contenido de la pista se setea por JS -->
+                    </div>
+                </div>
             </div>
 
             <!-- Columna Derecha: Editor y Consola (flex-col) -->
-            <!-- M O D I F I C A D O: Se añadió padding 'p-6' y se reestructuró el interior -->
             <div class="lg:w-3/5 h-full flex flex-col p-6">
-                <!-- N U E V O: Contenedor unificado para editor y consola -->
+                <!-- Contenedor unificado para editor y consola -->
                 <div class="w-full h-full flex flex-col bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
                     <!-- Editor -->
-                    <!-- M O D I F I C A D O: 'relative' para que CodeMirror (absolute) se posicione bien -->
                     <div class="flex-grow min-h-[300px] relative"> 
                         <textarea id="code-editor"></textarea>
                     </div>
                     <!-- Consola -->
-                    <!-- M O D I F I C A D O: Se quitó bg-gray-800 (ahora está en el padre) -->
                     <div class="h-1/3 min-h-[150px] p-4 font-mono text-sm overflow-y-auto border-t-2 border-gray-700">
                         <pre id="console-output" class="whitespace-pre-wrap">¡Bienvenido a BitCode! Presiona "Ejecutar" para probar tu código.</pre>
                     </div>
@@ -291,6 +298,9 @@
         let editor;
         let currentProblemIndex = 0;
         
+        // N U E V O: Timer de la pista
+        let hintTimer = null;
+        
         // Estado de Autenticación y Progreso
         let userId = null;
         let isGuest = true; 
@@ -308,8 +318,9 @@
             closeAuthModalBtn, authTabs, authContents, loginEmailField,
             loginPasswordField, loginBtn, loginError, regEmailField,
             regPasswordField, regBtn, regError,
-            // N U E V O: Elementos de Nivel
-            userLevelHeader, userLevelMain;
+            userLevelHeader, userLevelMain,
+            // N U E V O: Elementos de Pista
+            hintButton, hintContent;
 
         
         // Iconos SVG para la lista
@@ -351,9 +362,6 @@
             regError.innerText = "";
         }
 
-        /**
-         * N U E V O: Actualiza la UI del nivel
-         */
         function updateLevelUI() {
             const level = solvedProblemsList.length;
             if (userLevelHeader) userLevelHeader.innerText = level;
@@ -483,7 +491,6 @@
                 } catch (e) {
                     console.error("Error al guardar en localStorage:", e);
                 }
-                // N U E V O: Actualizar UI de nivel al guardar
                 updateLevelUI();
                 return; 
             }
@@ -499,7 +506,6 @@
             try {
                 await setDoc(docRef, { solved: solvedProblemsList });
                 console.log("Progreso de Firestore guardado.");
-                // N U E V O: Actualizar UI de nivel al guardar
                 updateLevelUI();
             } catch (error) {
                 console.error("Error al guardar progreso en Firestore:", error);
@@ -551,9 +557,12 @@
             regBtn = document.getElementById('register-btn');
             regError = document.getElementById('reg-error');
 
-            // N U E V O: Asignar elementos de Nivel
             userLevelHeader = document.getElementById('user-level-header');
             userLevelMain = document.getElementById('user-level-main');
+
+            // N U E V O: Asignar elementos de Pista
+            hintButton = document.getElementById('hint-btn');
+            hintContent = document.getElementById('hint-content');
         }
 
         function attachEventListeners() {
@@ -566,6 +575,9 @@
             closeAuthModalBtn.addEventListener('click', hideAuthModal);
             loginBtn.addEventListener('click', handleLogin);
             regBtn.addEventListener('click', handleRegister);
+            
+            // N U E V O: Listener para el botón de pista
+            hintButton.addEventListener('click', showHint);
             
             authTabs.forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -644,7 +656,7 @@
                         
                         updateAuthUI(userEmail, isGuest);
                         await loadUserProgress(); 
-                        updateLevelUI(); // N U E V O: Actualizar Nivel
+                        updateLevelUI();
                         renderProblemList(); 
                         
                     } else {
@@ -655,7 +667,7 @@
                         
                         updateAuthUI(userEmail, isGuest);
                         await loadUserProgress(); 
-                        updateLevelUI(); // N U E V O: Actualizar Nivel
+                        updateLevelUI();
                         renderProblemList(); 
                     }
                     resolve(); 
@@ -669,8 +681,7 @@
                 console.log("RenderProblemList saltado, problemas o grid no cargados.");
                 return;
             }
-
-            // N U E V O: Actualizar la UI de nivel CADA VEZ que se renderiza la lista
+            
             updateLevelUI();
             
             const solvedProblems = getSolvedProblems();
@@ -681,8 +692,7 @@
             problems.forEach((problem, index) => {
                 const isSolved = solvedProblems.includes(index);
                 const isUnlocked = isSolved || (index === unlockedUpTo);
-
-                // N U E V O: Clases de tarjeta mejoradas
+                
                 let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all duration-200 ease-in-out border-l-4";
                 let cardIcon = "";
                 let difficultyColor = "text-green-400";
@@ -733,19 +743,31 @@
             problemListView.classList.add('hidden');
             appContainer.classList.remove('hidden');
             currentProblemIndex = index;
-            loadProblem(index);
-            // M O D I F I C A D O: Refrescar CodeMirror después de que sea visible
-            // Esto arregla bugs de renderizado del editor
+            loadProblem(index); 
             setTimeout(() => {
                 editor.refresh();
                 editor.focus();
-            }, 100); // 100ms da tiempo a que la UI se asiente
+            }, 100);
         }
 
         function showProblemListView() {
+            // N U E V O: Limpiar el timer de la pista al volver a la lista
+            if (hintTimer) clearInterval(hintTimer);
+            
             appContainer.classList.add('hidden');
             problemListView.classList.remove('hidden');
             renderProblemList(); 
+        }
+        
+        // N U E V O: Función para mostrar la pista
+        function showHint() {
+            const problem = problems[currentProblemIndex];
+            if (problem && problem.hint) {
+                hintContent.innerText = problem.hint;
+                hintContent.classList.remove('hidden');
+                hintButton.disabled = true; // Desactivar después de usar
+                hintButton.innerHTML = `💡 Pista Revelada`;
+            }
         }
 
         function loadProblem(index) {
@@ -774,6 +796,31 @@
 
             editor.setValue(problem.starterCode || "# Escribe tu código aquí\n");
             consoleOutput.innerText = `Problema ${index + 1} cargado.`;
+
+            // --- N U E V A LÓGICA DE PISTA ---
+            hintContent.classList.add('hidden'); // Ocultar pista anterior
+            if (hintTimer) clearInterval(hintTimer); // Limpiar timer anterior
+            
+            if (problem && problem.hint) {
+                hintButton.classList.remove('hidden'); // Mostrar botón
+                let secondsLeft = 90; // 1.5 minutos
+                hintButton.disabled = true;
+                hintButton.innerHTML = `💡 Ver Pista (espera ${secondsLeft}s)`;
+                
+                hintTimer = setInterval(() => {
+                    secondsLeft--;
+                    if (secondsLeft > 0) {
+                        hintButton.innerHTML = `💡 Ver Pista (espera ${secondsLeft}s)`;
+                    } else {
+                        clearInterval(hintTimer);
+                        hintButton.disabled = false;
+                        hintButton.innerHTML = `💡 Ver Pista`;
+                    }
+                }, 1000); // Actualizar cada segundo
+            } else {
+                hintButton.classList.add('hidden'); // Ocultar si no hay pista
+            }
+            // --- FIN DE LÓGICA DE PISTA ---
         }
 
         function setButtonsDisabled(disabled) {
@@ -875,6 +922,9 @@ else:
                         solvedProblemsList.sort((a, b) => a - b); 
                         await saveUserProgress(); // Guardar y actualizar UI de Nivel
                     }
+                    
+                    // N U E V O: Limpiar el timer de la pista al completar
+                    if (hintTimer) clearInterval(hintTimer);
                     
                     setTimeout(showProblemListView, 2000); 
 
