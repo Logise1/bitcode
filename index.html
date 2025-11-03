@@ -21,6 +21,12 @@
     <style>
         /* Estilos de CodeMirror para que ocupe espacio */
         .CodeMirror {
+            /* N U E V O: CodeMirror debe ser absoluto para llenar el contenedor 'relative' */
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
             height: 100%;
             font-size: 16px;
         }
@@ -56,7 +62,7 @@
         <!-- Header -->
         <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center w-full z-10 sticky top-0">
             <h1 class="text-2xl font-bold text-white">BitCode</h1>
-            <!-- N U E V O: Contenedor de Usuario con Nivel -->
+            <!-- Contenedor de Usuario con Nivel -->
             <div class="flex items-center space-x-6">
                 <div class="flex items-center space-x-2" title="Tu nivel se basa en los problemas resueltos">
                     <svg class="w-5 h-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -71,7 +77,7 @@
             </div>
         </header>
 
-        <!-- N U E V O: Contenedor principal de la lista (con scroll) -->
+        <!-- Contenedor principal de la lista (con scroll) -->
         <main class="flex-1 overflow-y-auto">
             
             <!-- 1. Banner (Hero Section) -->
@@ -148,14 +154,20 @@
             </div>
 
             <!-- Columna Derecha: Editor y Consola (flex-col) -->
-            <div class="lg:w-3/5 h-full flex flex-col">
-                <!-- Editor -->
-                <div class="flex-grow min-h-[300px]">
-                    <textarea id="code-editor"></textarea>
-                </div>
-                <!-- Consola -->
-                <div class="h-1/3 min-h-[150px] bg-gray-800 p-4 font-mono text-sm overflow-y-auto border-t-2 border-gray-700">
-                    <pre id="console-output" class="whitespace-pre-wrap">¡Bienvenido a BitCode! Presiona "Ejecutar" para probar tu código.</pre>
+            <!-- M O D I F I C A D O: Se añadió padding 'p-6' y se reestructuró el interior -->
+            <div class="lg:w-3/5 h-full flex flex-col p-6">
+                <!-- N U E V O: Contenedor unificado para editor y consola -->
+                <div class="w-full h-full flex flex-col bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+                    <!-- Editor -->
+                    <!-- M O D I F I C A D O: 'relative' para que CodeMirror (absolute) se posicione bien -->
+                    <div class="flex-grow min-h-[300px] relative"> 
+                        <textarea id="code-editor"></textarea>
+                    </div>
+                    <!-- Consola -->
+                    <!-- M O D I F I C A D O: Se quitó bg-gray-800 (ahora está en el padre) -->
+                    <div class="h-1/3 min-h-[150px] p-4 font-mono text-sm overflow-y-auto border-t-2 border-gray-700">
+                        <pre id="console-output" class="whitespace-pre-wrap">¡Bienvenido a BitCode! Presiona "Ejecutar" para probar tu código.</pre>
+                    </div>
                 </div>
             </div>
         </main>
@@ -723,7 +735,12 @@
             appContainer.classList.remove('hidden');
             currentProblemIndex = index;
             loadProblem(index);
-            setTimeout(() => editor.refresh(), 0);
+            // M O D I F I C A D O: Refrescar CodeMirror después de que sea visible
+            // Esto arregla bugs de renderizado del editor
+            setTimeout(() => {
+                editor.refresh();
+                editor.focus();
+            }, 100); // 100ms da tiempo a que la UI se asiente
         }
 
         function showProblemListView() {
