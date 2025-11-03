@@ -17,186 +17,196 @@
 
     <!-- Pyodide (Intérprete de Python) -->
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
-
+    
+    <!-- 
+      NOTA: El script principal <script type="module"> se ha movido 
+      al final del <body> para evitar errores de carga (TypeError).
+    -->
 
     <style>
-        /* Estilos para que CodeMirror funcione bien con Tailwind y flexbox */
+        /* Estilos de CodeMirror para que ocupe espacio */
         .CodeMirror {
-            font-family: 'Source Code Pro', monospace;
-            height: 100%; /* El editor llenará el contenedor */
+            height: 100%;
             font-size: 16px;
         }
-        .CodeMirror-gutters {
-            background-color: #313335 !important; /* Ajuste para tema darcula */
+        /* Scrollbars customizadas */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; } /* gray-800 */
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } /* gray-600 */
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* gray-500 */
+
+        /* Transición de blur para el modal */
+        #problem-list-view.blurred, #app-container.blurred {
+            filter: blur(4px) grayscale(50%);
+            pointer-events: none;
+            user-select: none;
+            transition: filter 0.2s ease-out;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-200 font-sans h-full">
+<body class="bg-gray-900 text-gray-100 font-sans h-full flex flex-col">
 
-    <div id="loading-screen" class="fixed inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
-        <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <!-- 1. Pantalla de Carga Inicial -->
+    <div id="loading-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gray-900">
+        <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span id="loading-text" class="mt-4 text-lg">Cargando Intérprete de Python (Pyodide)...</span>
+          </svg>
+        <h1 class="text-2xl font-bold mt-4">BitCode</h1>
+        <p id="loading-text" class="text-gray-400 mt-2">Inicializando intérprete de Python...</p>
     </div>
 
-    <!-- N U E V O: Modal de Autenticación -->
-    <div id="auth-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-40 p-4">
-        <div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md relative">
-            
-            <!-- Botón de Cerrar Modal -->
-            <button id="close-auth-modal" class="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors">
+    <!-- 2. Vista de Lista de Problemas (Landing Page) -->
+    <div id="problem-list-view" class="h-full flex-col hidden">
+        <!-- Header -->
+        <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center w-full z-10">
+            <h1 class="text-2xl font-bold text-white">BitCode</h1>
+            <div class="flex items-center space-x-4">
+                <span id="user-status-header" class="text-gray-300 text-sm">Invitado</span>
+                <button id="login-btn-header" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">Iniciar Sesión</button>
+                <button id="logout-btn-header" class="hidden bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <!-- Contenedor principal de la lista (con scroll) -->
+        <main class="flex-1 overflow-y-auto p-6 md:p-10">
+            <div class="max-w-7xl mx-auto">
+                <h2 class="text-3xl font-bold text-white mb-6">Problemas de Python</h2>
+                <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Las tarjetas de problemas se generan aquí -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+
+    <!-- 3. Vista del Editor de Problemas -->
+    <div id="app-container" class="h-full flex-col hidden">
+        <!-- Barra de botones superior -->
+        <header class="bg-gray-800 shadow-md p-2 flex justify-between items-center w-full z-10">
+            <button id="back-to-list-btn" class="text-sm bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors flex items-center">
+                <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                </svg>
+                Volver a la lista
+            </button>
+            <div class="flex space-x-3">
+                <button id="run-code" class="text-sm bg-blue-600 text-white font-medium px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50">
+                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                    </svg>
+                    Ejecutar
+                </button>
+                <button id="submit-code" class="text-sm bg-green-600 text-white font-medium px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center disabled:opacity-50">
+                    <svg class="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    Enviar Solución
+                </button>
+            </div>
+        </header>
+
+        <!-- Contenido principal del editor (scrollable) -->
+        <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            <!-- Columna Izquierda: Descripción (con scroll) -->
+            <div class="lg:w-2/5 p-6 overflow-y-auto">
+                <h1 id="problem-title" class="text-2xl font-bold text-white mb-4">Cargando...</h1>
+                <div id="problem-description" class="prose prose-invert prose-p:text-gray-300 prose-headings:text-white prose-li:text-gray-300 prose-code:text-yellow-300">
+                    <p>Cargando descripción...</p>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Editor y Consola (flex-col) -->
+            <div class="lg:w-3/5 h-full flex flex-col">
+                <!-- Editor -->
+                <div class="flex-grow min-h-[300px]">
+                    <textarea id="code-editor"></textarea>
+                </div>
+                <!-- Consola -->
+                <div class="h-1/3 min-h-[150px] bg-gray-800 p-4 font-mono text-sm overflow-y-auto border-t-2 border-gray-700">
+                    <pre id="console-output" class="whitespace-pre-wrap">¡Bienvenido a BitCode! Presiona "Ejecutar" para probar tu código.</pre>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 4. Modal de Autenticación (Oculto) -->
+    <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div class="bg-gray-800 w-full max-w-md p-8 rounded-lg shadow-xl relative">
+            <button id="close-auth-modal" class="absolute top-4 right-4 text-gray-400 hover:text-white">
                 <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
             </button>
 
+            <h2 class="text-2xl font-bold text-white mb-2">¡Únete a BitCode!</h2>
+            <p class="text-gray-400 mb-6">Regístrate o inicia sesión para guardar tu progreso.</p>
+
             <!-- Pestañas -->
-            <div class="border-b border-gray-700">
-                <nav class="flex -mb-px" aria-label="Tabs">
-                    <button data-auth-tab="#auth-login" class="w-1/2 py-4 px-1 text-center border-b-2 border-blue-500 font-medium text-base text-blue-400">
+            <div class="border-b border-gray-700 mb-6">
+                <nav class="flex -mb-px space-x-6">
+                    <button data-auth-tab="#auth-login" class="py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-400">
                         Iniciar Sesión
                     </button>
-                    <button data-auth-tab="#auth-register" class="w-1/2 py-4 px-1 text-center border-b-2 border-transparent font-medium text-base text-gray-400 hover:text-gray-200 hover:border-gray-500">
+                    <button data-auth-tab="#auth-register" class="py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-400 hover:text-gray-300">
                         Registrarse
                     </button>
                 </nav>
             </div>
 
-            <!-- Contenido Pestaña Iniciar Sesión -->
-            <div id="auth-login" data-auth-content class="p-6">
-                <h2 class="text-xl font-bold text-white mb-4">¡Bienvenido de nuevo!</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label for="login-email" class="block text-sm font-medium text-gray-300">Email</label>
-                        <input type="email" id="login-email" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label for="login-password" class="block text-sm font-medium text-gray-300">Contraseña</label>
-                        <input type="password" id="login-password" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <p id="login-error" class="text-red-400 text-sm"></p>
-                    <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md transition-all hover:scale-105">
-                        Iniciar Sesión
-                    </button>
+            <!-- Contenido de Pestañas -->
+            <div id="auth-content-wrapper">
+                
+                <!-- Iniciar Sesión -->
+                <div id="auth-login" data-auth-content class="">
+                    <form onsubmit="return false;">
+                        <div class="mb-4">
+                            <label for="login-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                            <input type="email" id="login-email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="tu@email.com">
+                        </div>
+                        <div class="mb-6">
+                            <label for="login-password" class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
+                            <input type="password" id="login-password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="••••••••">
+                        </div>
+                        <p id="login-error" class="text-red-400 text-sm mb-4"></p>
+                        <button id="login-btn" class="w-full bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
+                            Iniciar Sesión
+                        </button>
+                    </form>
                 </div>
-            </div>
 
-            <!-- Contenido Pestaña Registrarse -->
-            <div id="auth-register" data-auth-content class="p-6 hidden">
-                <h2 class="text-xl font-bold text-white mb-4">Crea tu cuenta</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label for="register-email" class="block text-sm font-medium text-gray-300">Email</label>
-                        <input type="email" id="register-email" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label for="register-password" class="block text-sm font-medium text-gray-300">Contraseña (mín. 6 caracteres)</label>
-                        <input type="password" id="register-password" class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm p-3 text-white focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <p id="register-error" class="text-red-400 text-sm"></p>
-                    <button id="register-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition-all hover:scale-105">
-                        Crear Cuenta
-                    </button>
+                <!-- Registrarse -->
+                <div id="auth-register" data-auth-content class="hidden">
+                    <form onsubmit="return false;">
+                        <div class="mb-4">
+                            <label for="register-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                            <input type="email" id="register-email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="tu@email.com">
+                        </div>
+                        <div class="mb-6">
+                            <label for="register-password" class="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
+                            <input type="password" id="register-password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Mínimo 6 caracteres">
+                        </div>
+                        <p id="reg-error" class="text-red-400 text-sm mb-4"></p>
+                        <button id="register-btn" class="w-full bg-green-600 text-white font-medium py-2 px-4 rounded-md hover:bg-green-700 transition-colors">
+                            Crear Cuenta
+                        </button>
+                    </form>
                 </div>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- Vista de Lista con padding y mx-auto -->
-    <div id="problem-list-view" class="hidden w-full max-w-7xl h-full flex flex-col p-6 mx-auto">
-        <header class="flex-shrink-0 flex flex-wrap justify-between items-center mb-6 pb-4 border-b border-gray-700 gap-4">
-            <h1 class="text-3xl font-bold text-white">BitCode</h1>
-            <!-- N U E V O: Estado de Autenticación en Header -->
-            <div class="flex items-center gap-4">
-                <span id="user-status-header" class="text-gray-400 text-sm">Invitado</span>
-                <button id="login-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm">
-                    Iniciar Sesión
-                </button>
-                <button id="logout-btn-header" class="hidden bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm">
-                    Cerrar Sesión
-                </button>
-            </div>
-        </header>
-        <div class="flex-grow overflow-y-auto pr-2">
-             <div id="problem-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                <!-- Las tarjetas de problemas se insertarán aquí dinámicamente -->
             </div>
         </div>
     </div>
-
-
-    <!-- Contenedor Principal con padding y mx-auto -->
-    <div id="app-container" class="hidden w-full max-w-7xl h-full flex flex-col md:flex-row gap-4 p-6 mx-auto">
-
-        <!-- Panel Izquierdo: Problema -->
-        <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
-            
-            <!-- Botón de Volver -->
-            <div class="flex-shrink-0">
-                <button id="back-to-list-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm transition-all hover:scale-105">
-                    &larr; Volver a la lista
-                </button>
-            </div>
-
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg flex-grow h-full overflow-y-auto">
-                <h1 id="problem-title" class="text-2xl font-bold text-blue-300 mb-4"></h1>
-                <div id="problem-description" class="prose prose-invert text-gray-300">
-                    <!-- Descripción del problema -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Panel Derecho: Editor y Consola -->
-        <div class="w-full md:w-1/2 flex flex-col gap-4 h-full">
-            
-            <!-- Barra de botones (movida aquí) -->
-            <div class="flex-shrink-0 bg-gray-800 p-3 rounded-lg shadow-lg flex justify-end items-center gap-4">
-                <button id="run-code" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md text-sm disabled:opacity-50 transition-all hover:scale-105">
-                    Ejecutar
-                </button>
-                <button id="submit-code" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md text-sm disabled:opacity-50 transition-all hover:scale-105">
-                    Enviar Solución
-                </button>
-            </div>
-
-            <!-- Editor de Código (sin botones en header) -->
-            <div class="flex-grow bg-gray-800 rounded-lg shadow-lg flex flex-col min-h-[300px]">
-                <div class="flex-shrink-0 bg-gray-700 p-2 rounded-t-lg flex justify-between items-center">
-                    <span class="text-sm font-medium">Editor de Python</span>
-                </div>
-                <!-- Contenedor para CodeMirror -->
-                <div class="flex-grow relative h-full">
-                    <textarea id="code-editor"></textarea>
-                </div>
-            </div>
-
-            <!-- Botones de Navegación (Ocultos, la navegación principal es la lista) -->
-            <div class="hidden flex justify-between">
-                <button id="prev-problem" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">
-                    &larr; Anterior
-                </button>
-                <button id="next-problem" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md disabled:opacity-50">
-                    Siguiente &rarr;
-                </button>
-            </div>
-
-            <!-- Consola de Salida -->
-            <div class="bg-gray-800 p-4 rounded-lg shadow-lg h-48 flex flex-col">
-                <h3 class="text-lg font-semibold mb-2 flex-shrink-0">Consola</h3>
-                <pre id="console-output" class="bg-gray-900 rounded-md p-3 text-sm text-gray-300 h-full overflow-y-auto whitespace-pre-wrap"></pre>
-            </div>
-        </div>
-    </div>
-
-    <!-- Elementos de Audio (usando .mp3) -->
+    
+    <!-- 5. Elementos de Audio (Ocultos) -->
     <audio id="audio-enter" src="assets/enter.mp3" preload="auto"></audio>
     <audio id="audio-execute" src="assets/execute.mp3" preload="auto"></audio>
     <audio id="audio-complete" src="assets/complete.mp3" preload="auto"></audio>
 
-
+    
+    <!-- 
+        ============================================================
+        SCRIPT PRINCIPAL DE LA APLICACIÓN (MOVIDO AL FINAL)
+        ============================================================
+    -->
     <script type="module">
         // Importa las funciones que necesitas de los SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -205,19 +215,17 @@
             onAuthStateChanged, 
             signInWithEmailAndPassword, 
             createUserWithEmailAndPassword, 
-            signOut,
-            signInAnonymously,
-            signInWithCustomToken
+            signOut
+            // M O D I F I C A D O: Se eliminan signInAnonymously y signInWithCustomToken
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
             getDoc, 
             setDoc
-            // enableLogging // Para depuración (eliminado, causaba error de importación)
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- N U E V O: Configuración de Firebase (la que proporcionaste) ---
+        // --- Configuración de Firebase (la que proporcionaste) ---
         const firebaseConfig = {
           apiKey: "AIzaSyC9iNBJie4aHiW-igtdRN3farWRq9AlbIU",
           authDomain: "bitcode-9f43a.firebaseapp.com",
@@ -232,8 +240,6 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        // Habilitar logs de Firestore (útil para depurar)
-        // La función 'enableLogging' no está disponible en este SDK modular.
         
         // Usar appId del config O el global __app_id si existe, para las rutas de Firestore
         const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
@@ -246,9 +252,9 @@
         
         // N U E V O: Estado de Autenticación y Progreso
         let userId = null;
-        let isGuest = true;
+        let isGuest = true; // Empezamos como invitado por defecto
         let userEmail = "Invitado";
-        let solvedProblemsList = []; // Reemplaza a localStorage
+        let solvedProblemsList = []; // Almacén temporal del progreso
 
         // Referencias a Audio HTML5
         const audioEnter = document.getElementById('audio-enter');
@@ -321,13 +327,22 @@
             }
         }
         
-        // --- 3. N U E V O: Funciones de Autenticación y UI ---
+        // --- 3. Funciones de Autenticación y UI ---
 
         /**
          * Muestra/Oculta el modal de autenticación
          */
-        function showAuthModal() { authModal.classList.remove('hidden'); }
-        function hideAuthModal() { authModal.classList.add('hidden'); }
+        function showAuthModal() { 
+            authModal.classList.remove('hidden'); 
+            problemListView.classList.add('blurred'); // Añadir blur
+        }
+        function hideAuthModal() { 
+            authModal.classList.add('hidden'); 
+            problemListView.classList.remove('blurred'); // Quitar blur
+            // Limpiar errores
+            loginError.innerText = "";
+            regError.innerText = "";
+        }
 
         /**
          * Actualiza la UI del header según el estado de auth
@@ -389,35 +404,72 @@
         async function handleLogout() {
             try {
                 await signOut(auth);
-                // onAuthStateChanged se encargará de loguear como anónimo
+                // onAuthStateChanged se encargará de cambiar a modo invitado
             } catch (error) {
                 console.error("Error al cerrar sesión:", error);
             }
         }
 
-        // --- 4. N U E V O: Funciones de Progreso (Firestore) ---
+        // --- 4. M O D I F I C A D O: Funciones de Progreso (Híbridas) ---
 
         /**
-         * Carga el progreso del usuario desde Firestore
+         * Carga el progreso del usuario (localStorage o Firestore)
          */
         async function loadUserProgress() {
+            if (isGuest) {
+                // Cargar desde localStorage
+                console.log("Cargando progreso de invitado (localStorage)...");
+                const solved = localStorage.getItem('solvedProblems');
+                if (solved) {
+                    try {
+                        solvedProblemsList = JSON.parse(solved);
+                        if (!Array.isArray(solvedProblemsList)) solvedProblemsList = [];
+                    } catch (e) {
+                        solvedProblemsList = [];
+                    }
+                } else {
+                    solvedProblemsList = [];
+                }
+                console.log("Progreso local cargado:", solvedProblemsList);
+                return; // Importante salir aquí
+            }
+
+            // Si no es invitado, cargar de Firestore
             if (!userId) {
-                console.log("Sin userId, cargando progreso vacío.");
+                console.warn("loadUserProgress: Logueado pero sin userId. Saltando.");
                 solvedProblemsList = [];
                 return;
             }
             
-            console.log(`Cargando progreso para userId: ${userId} en ruta: /artifacts/${appId}/users/${userId}/progress/main`);
+            console.log(`Cargando progreso de Firestore para userId: ${userId} ...`);
+            // Ruta de Firestore: /artifacts/{appId}/users/{userId}/progress/main
             const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
             try {
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
-                    solvedProblemsList = docSnap.data().solved || [];
-                    console.log("Progreso cargado:", solvedProblemsList);
+                    const data = docSnap.data();
+                    // Fusionar progreso local (invitado) con el de Firestore al iniciar sesión
+                    const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
+                    const remoteSolved = data.solved || [];
+                    const mergedSolved = [...new Set([...localSolved, ...remoteSolved])];
+                    
+                    solvedProblemsList = mergedSolved;
+                    
+                    // Si hubo fusión, guardar de nuevo en Firestore
+                    if (mergedSolved.length > remoteSolved.length) {
+                        await saveUserProgress(); 
+                    }
+                    // Limpiar el local storage después de la fusión
+                    localStorage.removeItem('solvedProblems');
+
                 } else {
-                    console.log("No existe documento de progreso, empezando de cero.");
-                    solvedProblemsList = [];
+                    // No existe documento remoto, usar el local y guardarlo
+                    const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
+                    solvedProblemsList = localSolved;
+                    await saveUserProgress(); // Guardar el progreso local en la nube
+                    localStorage.removeItem('solvedProblems');
                 }
+                console.log("Progreso de Firestore cargado/fusionado:", solvedProblemsList);
             } catch (error) {
                 console.error("Error al cargar progreso de Firestore:", error);
                 solvedProblemsList = [];
@@ -425,26 +477,40 @@
         }
 
         /**
-         * Guarda el progreso del usuario en Firestore
+         * Guarda el progreso del usuario (localStorage o Firestore)
          */
         async function saveUserProgress() {
+            if (isGuest) {
+                // Guardar en localStorage
+                console.log("Guardando progreso de invitado (localStorage)...");
+                try {
+                    localStorage.setItem('solvedProblems', JSON.stringify(solvedProblemsList));
+                    console.log("Progreso local guardado.");
+                } catch (e) {
+                    console.error("Error al guardar en localStorage:", e);
+                }
+                return; // Importante salir aquí
+            }
+
+            // Si no es invitado, guardar en Firestore
             if (!userId) {
-                console.warn("No se puede guardar progreso: userId es nulo.");
+                console.warn("saveUserProgress: Logueado pero sin userId. Saltando guardado.");
                 return;
             }
-            
-            console.log(`Guardando progreso para userId: ${userId} en ruta: /artifacts/${appId}/users/${userId}/progress/main`);
+
+            console.log(`Guardando progreso en Firestore para userId: ${userId} ...`);
             const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
             try {
+                // Usar setDoc con merge:true es más seguro, pero setDoc directo es más simple aquí
                 await setDoc(docRef, { solved: solvedProblemsList });
-                console.log("Progreso guardado.");
+                console.log("Progreso de Firestore guardado.");
             } catch (error) {
                 console.error("Error al guardar progreso en Firestore:", error);
             }
         }
 
         /**
-         * M O D I F I C A D O: Ya no usa localStorage, solo devuelve la variable global
+         * Devuelve la lista de progreso cargada en memoria.
          */
         function getSolvedProblems() {
             return solvedProblemsList;
@@ -454,12 +520,13 @@
         // --- 5. Funciones de Lógica de la App (Modificadas) ---
 
         /**
-         * M O D I F I C A D O: Función principal de inicialización
+         * Función principal de inicialización
          */
         async function main() {
             try {
                 // Configurar el listener de Auth ANTES de cargar nada más
-                setupAuthListener();
+                // El listener se encargará de cargar el progreso inicial
+                await setupAuthListener();
 
                 // Cargar Pyodide y los problemas del JSON *en paralelo*
                 const pyodidePromise = loadPyodide();
@@ -496,6 +563,9 @@
                 // Ocultar loader y mostrar la VISTA DE LISTA
                 loadingScreen.classList.add('hidden');
                 problemListView.classList.remove('hidden');
+                
+                // Renderizar la lista de problemas (ahora que el progreso ya se cargó)
+                renderProblemList();
 
             } catch (error) {
                 console.error("Error en la inicialización:", error);
@@ -506,58 +576,50 @@
         }
         
         /**
-         * N U E V O: Listener de Auth
+         * M O D I F I C A D O: Listener de Auth (Sin login anónimo)
+         * Ahora es una función 'async' y devuelve una promesa
+         * para asegurar que el progreso se carga antes de continuar.
          */
         function setupAuthListener() {
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    // Usuario está logueado (real o anónimo)
-                    userId = user.uid;
-                    isGuest = user.isAnonymous;
-                    userEmail = user.email || (isGuest ? "Invitado" : `Usuario (${user.uid.substring(0, 5)})`);
-                    
-                    console.log(`Estado de Auth cambiado: ${userEmail}, Anónimo: ${isGuest}, UID: ${userId}`);
-                    
-                    updateAuthUI(userEmail, isGuest);
-                    await loadUserProgress(); // Cargar progreso desde Firestore
-                    renderProblemList(); // Re-renderizar lista con el progreso
-                    
-                } else {
-                    // No hay usuario, loguear como anónimo
-                    console.log("No hay usuario, logueando (token o anónimo)...");
-                    userId = null;
-                    isGuest = true;
-                    userEmail = "Invitado";
-                    solvedProblemsList = []; // Resetear progreso
-                    
-                    updateAuthUI(userEmail, isGuest);
-                    renderProblemList(); // Renderizar lista vacía
-                    
-                    try {
-                        // Usar token si existe, si no, anónimo
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            console.log("Iniciando sesión con __initial_auth_token...");
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            console.log("Iniciando sesión anónimamente...");
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Error en login anónimo/token:", error);
-                        loadingText.innerText = "Error de autenticación. No se puede iniciar la app.";
+            return new Promise((resolve) => {
+                onAuthStateChanged(auth, async (user) => {
+                    if (user && !user.isAnonymous) {
+                        // Usuario está logueado (REAL)
+                        userId = user.uid;
+                        isGuest = false;
+                        userEmail = user.email || `Usuario (${user.uid.substring(0, 5)})`;
+                        
+                        console.log(`Estado de Auth cambiado: ${userEmail}, Logueado`);
+                        
+                        updateAuthUI(userEmail, isGuest);
+                        await loadUserProgress(); // Cargar progreso desde Firestore + Fusión
+                        renderProblemList(); // Re-renderizar lista con el progreso
+                        
+                    } else {
+                        // No hay usuario, MODO INVITADO
+                        console.log("No hay usuario, cambiando a Modo Invitado (localStorage)...");
+                        userId = null;
+                        isGuest = true;
+                        userEmail = "Invitado";
+                        
+                        updateAuthUI(userEmail, isGuest);
+                        await loadUserProgress(); // Cargar progreso desde localStorage
+                        renderProblemList(); // Renderizar lista con progreso local
                     }
-                }
+                    resolve(); // Resuelve la promesa una vez que el estado de auth está listo
+                });
             });
         }
 
 
         /**
-         * M O D I F I C A D O: Renderiza la cuadrícula de problemas
+         * Renderiza la cuadrícula de problemas
          */
         function renderProblemList() {
-            if (!auth.currentUser) {
-                console.log("RenderProblemList saltado, auth no está listo.");
-                return; // No renderizar si auth no está listo
+            // No renderizar si los problemas aún no se han cargado
+            if (problems.length === 0) {
+                console.log("RenderProblemList saltado, problemas no cargados.");
+                return;
             }
             
             const solvedProblems = getSolvedProblems();
@@ -567,7 +629,8 @@
 
             problems.forEach((problem, index) => {
                 const isSolved = solvedProblems.includes(index);
-                const isUnlocked = index <= unlockedUpTo;
+                // M O D I F I C A D O: Desbloqueado si (es resuelto) O (es el siguiente)
+                const isUnlocked = isSolved || (index === unlockedUpTo);
 
                 let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all";
                 let cardIcon = "";
@@ -601,10 +664,10 @@
                 `;
 
                 if (isUnlocked) {
-                    // M O D I F I C A D O: Añadir lógica de Auth
+                    // M O D I F I C A D O: Lógica de clic actualizada
                     card.addEventListener('click', () => {
                         // Comprobar si es invitado Y está intentando acceder a problema > 0
-                        if (auth.currentUser && auth.currentUser.isAnonymous && index > 0) {
+                        if (isGuest && index > 0) {
                             showAuthModal(); // Pedir login/registro
                         } else {
                             showEditorView(index); // Permitir acceso
@@ -689,12 +752,17 @@
             setButtonsDisabled(true);
 
             try {
+                // Limpiar stdout/stderr de Pyodide
                 await pyodide.runPythonAsync(`
                     import sys, io
                     sys.stdout = io.StringIO()
                     sys.stderr = io.StringIO()
                 `);
+                
+                // Ejecutar el código del usuario
                 let result = await pyodide.runPythonAsync(userCode);
+                
+                // Capturar salidas
                 let stdout = await pyodide.runPythonAsync("sys.stdout.getvalue()");
                 let stderr = await pyodide.runPythonAsync("sys.stderr.getvalue()");
                 
@@ -703,6 +771,7 @@
                 } else if (stdout) {
                     consoleOutput.innerText = stdout;
                 } else if (result !== undefined && result !== null) {
+                    // Si no hay print, mostrar el 'return' de la última expresión
                     consoleOutput.innerText = String(result);
                 } else {
                     consoleOutput.innerText = "(Sin salida)";
@@ -717,7 +786,7 @@
 
         /**
          * M O D I F I C A D O: Ejecuta el código del usuario CON los tests
-         * (Ahora es async y guarda en Firestore)
+         * (Ahora es async y guarda en (localStorage O Firestore))
          */
         async function submitCode() {
             playExecuteSound(); // Sonido al ejecutar
@@ -732,6 +801,7 @@
             consoleOutput.innerText = "Ejecutando pruebas...";
             setButtonsDisabled(true);
 
+            // Indentar el código del usuario y el código de prueba
             const indentedUserCode = userCode.replace(/^/gm, '    ');
             const indentedTestCode = problem.testCode.replace(/^/gm, '    ');
 
@@ -744,17 +814,24 @@ try:
     # --- Código del Usuario ---
 ${indentedUserCode}
     # --- Fin del Código del Usuario ---
+
     # --- Arnés de Pruebas ---
 ${indentedTestCode}
     # --- Fin del Arnés de Pruebas ---
 except Exception as e:
+    # Capturar errores de sintaxis o runtime
     print(f"__FAILURE__: Error de sintaxis o ejecución: {e}")
+
+# Obtener salidas
 stdout_value = sys.stdout.getvalue()
 stderr_value = sys.stderr.getvalue()
+
 if stderr_value:
-    output = f"Error de Runtime:\\n{stderr_value}"
+    output = f"__FAILURE__: Error de Runtime:\\n{stderr_value}"
 else:
     output = stdout_value
+
+# Devolver un diccionario para JS
 {'output': output}
             `;
             
@@ -769,11 +846,11 @@ else:
                     playCompleteSound(); // Sonido de éxito
                     consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
                     
-                    // --- M O D I F I C A D O: Guardar Progreso en Firestore ---
+                    // --- M O D I F I C A D O: Guardar Progreso (Híbrido) ---
                     if (!solvedProblemsList.includes(currentProblemIndex)) {
                         solvedProblemsList.push(currentProblemIndex);
                         solvedProblemsList.sort((a, b) => a - b); // Mantenerlos ordenados
-                        await saveUserProgress(); // Guardar en Firestore
+                        await saveUserProgress(); // Guardar (en localStorage o Firestore)
                     }
                     
                     // Volver a la lista después de 2 segundos
@@ -783,7 +860,7 @@ else:
                     let errorMsg = output.split("__FAILURE__:")[1] || "Tests fallidos.";
                     consoleOutput.innerHTML = `<span class="text-red-400 font-bold">Solución Incorrecta:</span>\n${errorMsg.trim()}`;
                 } else {
-                    consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test:</span>\n${output}`;
+                    consoleOutput.innerHTML = `<span class="text-yellow-500">Salida inesperada del test (sin __SUCCESS__):</span>\n${output || '(Sin salida)'}`;
                 }
 
             } catch (e) {
@@ -794,11 +871,13 @@ else:
         }
 
         // --- 6. Event Listeners ---
+        // (Asegurarse de que los elementos existen antes de añadir listeners)
+        
         backToListBtn.addEventListener('click', showProblemListView);
         runButton.addEventListener('click', runCode);
         submitButton.addEventListener('click', submitCode);
 
-        // N U E V O: Listeners de Auth
+        // Listeners de Auth
         loginButtonHeader.addEventListener('click', showAuthModal);
         logoutButtonHeader.addEventListener('click', handleLogout);
         closeAuthModalBtn.addEventListener('click', hideAuthModal);
@@ -815,6 +894,10 @@ else:
                 
                 authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
                 tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
+                
+                // Limpiar errores al cambiar de pestaña
+                loginError.innerText = "";
+                regError.innerText = "";
             });
         });
 
