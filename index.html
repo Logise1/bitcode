@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BitCode Runner</title>
+    <!-- N U E V O: Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,10 +67,10 @@
             <h1 class="text-2xl font-bold text-white">BitCode</h1>
             <!-- Contenedor de Usuario con Nivel -->
             <div class="flex items-center space-x-6">
-                <!-- M O D I F I C A D O: Cambiado SVG por Emoji -->
+                <!-- M O D I F I C A D O: Texto y ID -->
                 <div class="flex items-center space-x-2" title="Tu nivel se basa en los problemas resueltos">
                     <span class="text-xl" role="img" aria-label="star">⭐</span>
-                    <span class="text-sm font-medium text-gray-300">Nivel: <span id="user-level-header" class="font-bold text-white">0</span></span>
+                    <span class="text-sm font-medium text-gray-300">Nivel: <span id="user-level-header" class="font-bold text-white">Principiante</span></span>
                 </div>
                 <div class="w-px h-6 bg-gray-600"></div> <!-- Separador -->
                 <span id="user-status-header" class="text-gray-300 text-sm hidden sm:block">Invitado</span>
@@ -80,7 +83,8 @@
         <main class="flex-1 overflow-y-auto">
             
             <!-- 1. Banner (Hero Section) -->
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-10 md:p-16 text-white shadow-lg">
+            <!-- M O D I F I C A D O: Cambiado el gradiente -->
+            <div class="bg-gradient-to-r from-cyan-500 to-blue-600 p-10 md:p-16 text-white shadow-lg">
                 <div class="max-w-7xl mx-auto">
                     <h2 class="text-4xl md:text-5xl font-bold">Python</h2>
                     <p class="text-xl text-blue-100 mt-2 max-w-2xl">Domina la lógica y resuelve problemas, un desafío a la vez.</p>
@@ -100,8 +104,12 @@
                             </svg>
                         </div>
                         <div>
-                            <span class="text-gray-400 text-sm">NIVEL ACTUAL</span>
-                            <p id="user-level-main" class="text-3xl font-bold text-white">0</p>
+                            <!-- M O D I F I C A D O: Texto "RANGO" -->
+                            <span class="text-gray-400 text-sm">RANGO ACTUAL</span>
+                            <!-- M O D I F I C A D O: ID y texto inicial -->
+                            <p id="user-level-main" class="text-3xl font-bold text-white">Principiante</p>
+                            <!-- N U E V O: Texto de progreso -->
+                            <p id="user-level-progress-text" class="text-sm text-gray-400 mt-2">Cargando progreso...</p>
                         </div>
                     </div>
                 </div>
@@ -301,7 +309,7 @@
         // Timer de la pista
         let hintTimer = null;
         
-        // N U E V O: Para rastrear el portapapeles interno
+        // Para rastrear el portapapeles interno
         let internalClipboard = null; 
         
         // Estado de Autenticación y Progreso
@@ -322,6 +330,8 @@
             loginPasswordField, loginBtn, loginError, regEmailField,
             regPasswordField, regBtn, regError,
             userLevelHeader, userLevelMain,
+            // N U E V O: Elemento de progreso de nivel
+            userLevelProgressText,
             // Elementos de Pista
             hintButton, hintContent;
 
@@ -365,10 +375,48 @@
             regError.innerText = "";
         }
 
+        // N U E V O: Función de helper para obtener info del nivel
+        function getLevelInfo(solvedCount, totalProblems) {
+            if (solvedCount < 5) {
+                return { name: "Principiante", nextLevelAt: 5, nextLevelName: "Aficionado" };
+            }
+            if (solvedCount < 10) {
+                return { name: "Aficionado", nextLevelAt: 10, nextLevelName: "Programador" };
+            }
+            if (solvedCount < 15) {
+                return { name: "Programador", nextLevelAt: 15, nextLevelName: "Veterano" };
+            }
+            if (solvedCount < 20) {
+                return { name: "Veterano", nextLevelAt: 20, nextLevelName: "Experto" };
+            }
+            
+            // Usar total problems (default a 25 si no está cargado)
+            const total = totalProblems || 25; 
+            if (solvedCount < total) {
+                return { name: "Experto", nextLevelAt: total, nextLevelName: "Maestro" };
+            }
+            
+            return { name: "Maestro", nextLevelAt: null, nextLevelName: null }; // Nivel Maestro
+        }
+
+        // M O D I F I C A D O: Función 'updateLevelUI'
         function updateLevelUI() {
-            const level = solvedProblemsList.length;
-            if (userLevelHeader) userLevelHeader.innerText = level;
-            if (userLevelMain) userLevelMain.innerText = level;
+            const solvedCount = solvedProblemsList.length;
+            const totalProblemsCount = problems.length; // Obtener total de problemas
+            const levelInfo = getLevelInfo(solvedCount, totalProblemsCount);
+            
+            if (userLevelHeader) userLevelHeader.innerText = levelInfo.name;
+            if (userLevelMain) userLevelMain.innerText = levelInfo.name;
+
+            // Actualizar texto de progreso
+            if (userLevelProgressText) {
+                if (levelInfo.nextLevelAt !== null) {
+                    const problemsLeft = levelInfo.nextLevelAt - solvedCount;
+                    userLevelProgressText.innerText = `Resuelve ${problemsLeft} problema${problemsLeft > 1 ? 's' : ''} más para llegar a ${levelInfo.nextLevelName}.`;
+                } else {
+                    userLevelProgressText.innerText = "¡Felicidades, eres un Maestro BitCode!";
+                }
+            }
         }
 
         function updateAuthUI(email, isUserGuest) {
@@ -494,7 +542,7 @@
                 } catch (e) {
                     console.error("Error al guardar en localStorage:", e);
                 }
-                updateLevelUI();
+                updateLevelUI(); // Actualizar UI de Nivel
                 return; 
             }
 
@@ -509,7 +557,7 @@
             try {
                 await setDoc(docRef, { solved: solvedProblemsList });
                 console.log("Progreso de Firestore guardado.");
-                updateLevelUI();
+                updateLevelUI(); // Actualizar UI de Nivel
             } catch (error) {
                 console.error("Error al guardar progreso en Firestore:", error);
             }
@@ -562,6 +610,8 @@
 
             userLevelHeader = document.getElementById('user-level-header');
             userLevelMain = document.getElementById('user-level-main');
+            // N U E V O: Asignar texto de progreso
+            userLevelProgressText = document.getElementById('user-level-progress-text');
 
             // Asignar elementos de Pista
             hintButton = document.getElementById('hint-btn');
@@ -633,7 +683,7 @@
                     indentUnit: 4
                 });
 
-                // --- N U E V A LÓGICA ANTI-PEGADO ---
+                // --- LÓGICA ANTI-PEGADO ---
                 editor.on('copy', (cm) => {
                     internalClipboard = cm.getSelection();
                     console.log("Copiado interno detectado.");
@@ -647,19 +697,11 @@
                 editor.on('paste', (cm, event) => {
                     const pastedText = event.clipboardData.getData('text/plain');
                     
-                    // Si el portapapeles interno es nulo (no se ha copiado nada de aquí)
-                    // O si el texto pegado es DIFERENTE al portapapeles interno...
                     if (internalClipboard === null || pastedText !== internalClipboard) {
-                        // Es un pegado externo.
                         console.warn("Pegado externo detectado. Recargando página.");
-                        
-                        // Prevenir que el texto se pegue
                         event.preventDefault(); 
-                        
-                        // Recargar la página
                         location.reload();
                     }
-                    // Si son iguales, es un pegado interno. No hacer nada y permitirlo.
                     console.log("Pegado interno permitido.");
                 });
                 // --- FIN DE LÓGICA ANTI-PEGADO ---
@@ -690,7 +732,7 @@
                         
                         updateAuthUI(userEmail, isGuest);
                         await loadUserProgress(); 
-                        updateLevelUI();
+                        updateLevelUI(); // Actualizar Nivel
                         renderProblemList(); 
                         
                     } else {
@@ -701,7 +743,7 @@
                         
                         updateAuthUI(userEmail, isGuest);
                         await loadUserProgress(); 
-                        updateLevelUI();
+                        updateLevelUI(); // Actualizar Nivel
                         renderProblemList(); 
                     }
                     resolve(); 
@@ -716,7 +758,7 @@
                 return;
             }
             
-            updateLevelUI();
+            updateLevelUI(); // Actualizar la UI de nivel CADA VEZ que se renderiza la lista
             
             const solvedProblems = getSolvedProblems();
             const unlockedUpTo = solvedProblems.length; 
