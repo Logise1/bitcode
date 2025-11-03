@@ -18,11 +18,6 @@
     <!-- Pyodide (Intérprete de Python) -->
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
     
-    <!-- 
-      NOTA: El script principal <script type="module"> se ha movido 
-      al final del <body> para evitar errores de carga (TypeError).
-    -->
-
     <style>
         /* Estilos de CodeMirror para que ocupe espacio */
         .CodeMirror {
@@ -204,7 +199,7 @@
     
     <!-- 
         ============================================================
-        SCRIPT PRINCIPAL DE LA APLICACIÓN (MOVIDO AL FINAL)
+        SCRIPT PRINCIPAL DE LA APLICACIÓN
         ============================================================
     -->
     <script type="module">
@@ -216,7 +211,6 @@
             signInWithEmailAndPassword, 
             createUserWithEmailAndPassword, 
             signOut
-            // M O D I F I C A D O: Se eliminan signInAnonymously y signInWithCustomToken
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -244,61 +238,30 @@
         // Usar appId del config O el global __app_id si existe, para las rutas de Firestore
         const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
         
-        // --- 1. Variables Globales (Modificadas) ---
+        // --- 1. Variables Globales (Declaradas) ---
+        // N O T A: Se asignarán en main()
         let problems = []; 
         let pyodide;
         let editor;
         let currentProblemIndex = 0;
         
-        // N U E V O: Estado de Autenticación y Progreso
+        // Estado de Autenticación y Progreso
         let userId = null;
-        let isGuest = true; // Empezamos como invitado por defecto
+        let isGuest = true; 
         let userEmail = "Invitado";
-        let solvedProblemsList = []; // Almacén temporal del progreso
+        let solvedProblemsList = []; 
 
         // Referencias a Audio HTML5
-        const audioEnter = document.getElementById('audio-enter');
-        const audioExecute = document.getElementById('audio-execute');
-        const audioComplete = document.getElementById('audio-complete');
+        let audioEnter, audioExecute, audioComplete;
 
         // Elementos de la UI
-        const loadingScreen = document.getElementById('loading-screen');
-        const loadingText = document.getElementById('loading-text');
-        
-        // Vistas
-        const problemListView = document.getElementById('problem-list-view');
-        const appContainer = document.getElementById('app-container');
-        
-        // Vista de Lista
-        const problemGrid = document.getElementById('problem-grid');
-        const loginButtonHeader = document.getElementById('login-btn-header');
-        const logoutButtonHeader = document.getElementById('logout-btn-header');
-        const userStatusHeader = document.getElementById('user-status-header');
-
-        // Vista de Editor
-        const problemTitle = document.getElementById('problem-title');
-        const problemDescription = document.getElementById('problem-description');
-        const codeEditor = document.getElementById('code-editor');
-        const consoleOutput = document.getElementById('console-output');
-        
-        // Botones
-        const backToListBtn = document.getElementById('back-to-list-btn');
-        const runButton = document.getElementById('run-code');
-        const submitButton = document.getElementById('submit-code');
-        
-        // N U E V O: Elementos del Modal de Auth
-        const authModal = document.getElementById('auth-modal');
-        const closeAuthModalBtn = document.getElementById('close-auth-modal');
-        const authTabs = document.querySelectorAll('[data-auth-tab]');
-        const authContents = document.querySelectorAll('[data-auth-content]');
-        const loginEmailField = document.getElementById('login-email');
-        const loginPasswordField = document.getElementById('login-password');
-        const loginBtn = document.getElementById('login-btn');
-        const loginError = document.getElementById('login-error');
-        const regEmailField = document.getElementById('register-email');
-        const regPasswordField = document.getElementById('register-password');
-        const regBtn = document.getElementById('register-btn');
-        const regError = document.getElementById('register-error');
+        let loadingScreen, loadingText, problemListView, appContainer,
+            problemGrid, loginButtonHeader, logoutButtonHeader, userStatusHeader,
+            problemTitle, problemDescription, codeEditor, consoleOutput,
+            backToListBtn, runButton, submitButton, authModal,
+            closeAuthModalBtn, authTabs, authContents, loginEmailField,
+            loginPasswordField, loginBtn, loginError, regEmailField,
+            regPasswordField, regBtn, regError;
 
         
         // Iconos SVG para la lista
@@ -410,7 +373,7 @@
             }
         }
 
-        // --- 4. M O D I F I C A D O: Funciones de Progreso (Híbridas) ---
+        // --- 4. Funciones de Progreso (Híbridas) ---
 
         /**
          * Carga el progreso del usuario (localStorage o Firestore)
@@ -431,7 +394,7 @@
                     solvedProblemsList = [];
                 }
                 console.log("Progreso local cargado:", solvedProblemsList);
-                return; // Importante salir aquí
+                return; 
             }
 
             // Si no es invitado, cargar de Firestore
@@ -456,7 +419,7 @@
                     solvedProblemsList = mergedSolved;
                     
                     // Si hubo fusión, guardar de nuevo en Firestore
-                    if (mergedSolved.length > remoteSolved.length) {
+                    if (mergedSolved.length > remoteSolved.length || localSolved.length > 0) {
                         await saveUserProgress(); 
                     }
                     // Limpiar el local storage después de la fusión
@@ -466,8 +429,10 @@
                     // No existe documento remoto, usar el local y guardarlo
                     const localSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
                     solvedProblemsList = localSolved;
-                    await saveUserProgress(); // Guardar el progreso local en la nube
-                    localStorage.removeItem('solvedProblems');
+                    if (localSolved.length > 0) {
+                        await saveUserProgress(); // Guardar el progreso local en la nube
+                        localStorage.removeItem('solvedProblems');
+                    }
                 }
                 console.log("Progreso de Firestore cargado/fusionado:", solvedProblemsList);
             } catch (error) {
@@ -489,7 +454,7 @@
                 } catch (e) {
                     console.error("Error al guardar en localStorage:", e);
                 }
-                return; // Importante salir aquí
+                return; 
             }
 
             // Si no es invitado, guardar en Firestore
@@ -501,7 +466,6 @@
             console.log(`Guardando progreso en Firestore para userId: ${userId} ...`);
             const docRef = doc(db, 'artifacts', appId, 'users', userId, 'progress', 'main');
             try {
-                // Usar setDoc con merge:true es más seguro, pero setDoc directo es más simple aquí
                 await setDoc(docRef, { solved: solvedProblemsList });
                 console.log("Progreso de Firestore guardado.");
             } catch (error) {
@@ -517,18 +481,96 @@
         }
 
 
-        // --- 5. Funciones de Lógica de la App (Modificadas) ---
+        // --- 5. Funciones de Lógica de la App ---
+
+        /**
+         * N U E V O: Asigna todas las variables de elementos del DOM
+         */
+        function assignDomElements() {
+            audioEnter = document.getElementById('audio-enter');
+            audioExecute = document.getElementById('audio-execute');
+            audioComplete = document.getElementById('audio-complete');
+
+            loadingScreen = document.getElementById('loading-screen');
+            loadingText = document.getElementById('loading-text');
+            
+            problemListView = document.getElementById('problem-list-view');
+            appContainer = document.getElementById('app-container');
+            
+            problemGrid = document.getElementById('problem-grid');
+            loginButtonHeader = document.getElementById('login-btn-header');
+            logoutButtonHeader = document.getElementById('logout-btn-header');
+            userStatusHeader = document.getElementById('user-status-header');
+
+            problemTitle = document.getElementById('problem-title');
+            problemDescription = document.getElementById('problem-description');
+            codeEditor = document.getElementById('code-editor');
+            consoleOutput = document.getElementById('console-output');
+            
+            backToListBtn = document.getElementById('back-to-list-btn');
+            runButton = document.getElementById('run-code');
+            submitButton = document.getElementById('submit-code');
+            
+            authModal = document.getElementById('auth-modal');
+            closeAuthModalBtn = document.getElementById('close-auth-modal');
+            authTabs = document.querySelectorAll('[data-auth-tab]');
+            authContents = document.querySelectorAll('[data-auth-content]');
+            loginEmailField = document.getElementById('login-email');
+            loginPasswordField = document.getElementById('login-password');
+            loginBtn = document.getElementById('login-btn');
+            loginError = document.getElementById('login-error');
+            regEmailField = document.getElementById('register-email');
+            regPasswordField = document.getElementById('register-password');
+            regBtn = document.getElementById('register-btn');
+            regError = document.getElementById('reg-error');
+        }
+
+        /**
+         * N U E V O: Asigna todos los event listeners
+         */
+        function attachEventListeners() {
+            backToListBtn.addEventListener('click', showProblemListView);
+            runButton.addEventListener('click', runCode);
+            submitButton.addEventListener('click', submitCode);
+
+            // Listeners de Auth
+            loginButtonHeader.addEventListener('click', showAuthModal);
+            logoutButtonHeader.addEventListener('click', handleLogout);
+            closeAuthModalBtn.addEventListener('click', hideAuthModal);
+            loginBtn.addEventListener('click', handleLogin);
+            regBtn.addEventListener('click', handleRegister);
+            
+            // Listener para las pestañas del modal
+            authTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const target = document.querySelector(tab.dataset.authTab);
+                    
+                    authContents.forEach(content => content.classList.add('hidden'));
+                    target.classList.remove('hidden');
+                    
+                    authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
+                    tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
+                    
+                    // Limpiar errores al cambiar de pestaña
+                    loginError.innerText = "";
+                    regError.innerText = "";
+                });
+            });
+        }
+
 
         /**
          * Función principal de inicialización
          */
         async function main() {
+            // N U E V O: 1. Asignar elementos del DOM ahora que está cargado
+            assignDomElements();
+
             try {
-                // Configurar el listener de Auth ANTES de cargar nada más
-                // El listener se encargará de cargar el progreso inicial
+                // 2. Configurar el listener de Auth
                 await setupAuthListener();
 
-                // Cargar Pyodide y los problemas del JSON *en paralelo*
+                // 3. Cargar Pyodide y los problemas del JSON *en paralelo*
                 const pyodidePromise = loadPyodide();
                 const problemsPromise = fetch("my_problems.json")
                     .then(res => {
@@ -541,7 +583,7 @@
                         throw e; // Detener la ejecución
                     });
 
-                // Esperar a que ambas promesas se completen
+                // 4. Esperar a que ambas promesas se completen
                 pyodide = await pyodidePromise;
                 console.log("Pyodide cargado.");
                 
@@ -549,7 +591,7 @@
                 problems = await problemsPromise;
                 console.log("Problemas cargados:", problems);
 
-                // Inicializar CodeMirror (solo una vez)
+                // 5. Inicializar CodeMirror (solo una vez)
                 editor = CodeMirror.fromTextArea(codeEditor, {
                     lineNumbers: true,
                     mode: "python",
@@ -560,11 +602,14 @@
                     indentUnit: 4
                 });
                 
-                // Ocultar loader y mostrar la VISTA DE LISTA
+                // 6. Asignar Listeners ahora que todo está listo
+                attachEventListeners();
+
+                // 7. Ocultar loader y mostrar la VISTA DE LISTA
                 loadingScreen.classList.add('hidden');
                 problemListView.classList.remove('hidden');
                 
-                // Renderizar la lista de problemas (ahora que el progreso ya se cargó)
+                // 8. Renderizar la lista de problemas
                 renderProblemList();
 
             } catch (error) {
@@ -576,9 +621,7 @@
         }
         
         /**
-         * M O D I F I C A D O: Listener de Auth (Sin login anónimo)
-         * Ahora es una función 'async' y devuelve una promesa
-         * para asegurar que el progreso se carga antes de continuar.
+         * Listener de Auth (Sin login anónimo)
          */
         function setupAuthListener() {
             return new Promise((resolve) => {
@@ -617,8 +660,8 @@
          */
         function renderProblemList() {
             // No renderizar si los problemas aún no se han cargado
-            if (problems.length === 0) {
-                console.log("RenderProblemList saltado, problemas no cargados.");
+            if (problems.length === 0 || !problemGrid) {
+                console.log("RenderProblemList saltado, problemas o grid no cargados.");
                 return;
             }
             
@@ -629,7 +672,6 @@
 
             problems.forEach((problem, index) => {
                 const isSolved = solvedProblems.includes(index);
-                // M O D I F I C A D O: Desbloqueado si (es resuelto) O (es el siguiente)
                 const isUnlocked = isSolved || (index === unlockedUpTo);
 
                 let cardClasses = "bg-gray-800 p-6 rounded-lg shadow-lg flex flex-col justify-between h-48 transition-all";
@@ -664,7 +706,6 @@
                 `;
 
                 if (isUnlocked) {
-                    // M O D I F I C A D O: Lógica de clic actualizada
                     card.addEventListener('click', () => {
                         // Comprobar si es invitado Y está intentando acceder a problema > 0
                         if (isGuest && index > 0) {
@@ -698,7 +739,7 @@
         function showProblemListView() {
             appContainer.classList.add('hidden');
             problemListView.classList.remove('hidden');
-            renderProblemList(); // Re-renderizar para mostrar el nuevo estado (ej. problema resuelto)
+            renderProblemList(); // Re-renderizar para mostrar el nuevo estado
         }
 
 
@@ -771,7 +812,6 @@
                 } else if (stdout) {
                     consoleOutput.innerText = stdout;
                 } else if (result !== undefined && result !== null) {
-                    // Si no hay print, mostrar el 'return' de la última expresión
                     consoleOutput.innerText = String(result);
                 } else {
                     consoleOutput.innerText = "(Sin salida)";
@@ -785,8 +825,7 @@
         }
 
         /**
-         * M O D I F I C A D O: Ejecuta el código del usuario CON los tests
-         * (Ahora es async y guarda en (localStorage O Firestore))
+         * Ejecuta el código del usuario CON los tests
          */
         async function submitCode() {
             playExecuteSound(); // Sonido al ejecutar
@@ -801,7 +840,6 @@
             consoleOutput.innerText = "Ejecutando pruebas...";
             setButtonsDisabled(true);
 
-            // Indentar el código del usuario y el código de prueba
             const indentedUserCode = userCode.replace(/^/gm, '    ');
             const indentedTestCode = problem.testCode.replace(/^/gm, '    ');
 
@@ -819,10 +857,8 @@ ${indentedUserCode}
 ${indentedTestCode}
     # --- Fin del Arnés de Pruebas ---
 except Exception as e:
-    # Capturar errores de sintaxis o runtime
     print(f"__FAILURE__: Error de sintaxis o ejecución: {e}")
 
-# Obtener salidas
 stdout_value = sys.stdout.getvalue()
 stderr_value = sys.stderr.getvalue()
 
@@ -831,7 +867,6 @@ if stderr_value:
 else:
     output = stdout_value
 
-# Devolver un diccionario para JS
 {'output': output}
             `;
             
@@ -846,14 +881,12 @@ else:
                     playCompleteSound(); // Sonido de éxito
                     consoleOutput.innerHTML = `<span class="text-green-400 font-bold">¡Solución Aceptada!</span>\nTodos los tests pasaron.`;
                     
-                    // --- M O D I F I C A D O: Guardar Progreso (Híbrido) ---
                     if (!solvedProblemsList.includes(currentProblemIndex)) {
                         solvedProblemsList.push(currentProblemIndex);
-                        solvedProblemsList.sort((a, b) => a - b); // Mantenerlos ordenados
+                        solvedProblemsList.sort((a, b) => a - b); 
                         await saveUserProgress(); // Guardar (en localStorage o Firestore)
                     }
                     
-                    // Volver a la lista después de 2 segundos
                     setTimeout(showProblemListView, 2000); 
 
                 } else if (output.includes("__FAILURE__:")) {
@@ -870,39 +903,9 @@ else:
             setButtonsDisabled(false);
         }
 
-        // --- 6. Event Listeners ---
-        // (Asegurarse de que los elementos existen antes de añadir listeners)
-        
-        backToListBtn.addEventListener('click', showProblemListView);
-        runButton.addEventListener('click', runCode);
-        submitButton.addEventListener('click', submitCode);
-
-        // Listeners de Auth
-        loginButtonHeader.addEventListener('click', showAuthModal);
-        logoutButtonHeader.addEventListener('click', handleLogout);
-        closeAuthModalBtn.addEventListener('click', hideAuthModal);
-        loginBtn.addEventListener('click', handleLogin);
-        regBtn.addEventListener('click', handleRegister);
-        
-        // Listener para las pestañas del modal
-        authTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const target = document.querySelector(tab.dataset.authTab);
-                
-                authContents.forEach(content => content.classList.add('hidden'));
-                target.classList.remove('hidden');
-                
-                authTabs.forEach(t => t.classList.replace('border-blue-500', 'text-blue-400', 'border-transparent', 'text-gray-400'));
-                tab.classList.replace('border-transparent', 'text-gray-400', 'border-blue-500', 'text-blue-400');
-                
-                // Limpiar errores al cambiar de pestaña
-                loginError.innerText = "";
-                regError.innerText = "";
-            });
-        });
-
         // --- 7. Ejecución ---
-        main();
+        // N U E V O: Esperar a que el DOM esté listo antes de ejecutar main()
+        document.addEventListener('DOMContentLoaded', main);
 
     </script>
 </body>
